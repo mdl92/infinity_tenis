@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ---- Usuarios: solo el admin da de alta (no hay registro). Los nombres son públicos (clasificaciones) ----
+    match /users/{uid} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---- Estructura del torneo: pública para leer, solo el admin escribe ----
+    match /tournaments/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /groups/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---- Partidos ----
+    match /matches/{id} {
+      function isParticipant() {
+        return request.auth.uid in [resource.data.player1Id, resource.data.player2Id];
+      }
+      function changed() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      // Un jugador del partido introduce el resultado
+      function isReport() {
+        return resource.data.status == 'pending'
+          && request.resource.data.status == 'reported'
+          && request.resource.data.reportedBy == request.auth.uid
+          && request.resource.data.winnerId in [resource.data.player1Id, resource.data.player2Id]
+          && changed().hasOnly(['sets', 'status', 'reportedBy', 'winnerId', 'disputedBy', 'disputedSets', 'updatedAt']);
+      }
+      // El contrincante lo confirma (sin poder tocar el marcador)
+      function isConfirm() {
+        return resource.data.status == 'reported'
+          && resource.data.reportedBy != request.auth.uid
+          && request.resource.data.status == 'confirmed'
+          && request.resource.data.confirmedBy == request.auth.uid
+          && changed().hasOnly(['status', 'confirmedBy', 'updatedAt']);
+      }
+      // ...o lo rechaza: vuelve a pendiente y queda constancia de la discrepancia
+      function isReject() {
+        return resource.data.status == 'reported'
+          && resource.data.reportedBy != request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.disputedBy == request.auth.uid
+          && changed().hasOnly(['sets', 'status', 'reportedBy', 'winnerId', 'disputedBy', 'disputedSets', 'updatedAt']);
+      }
+
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (signedIn() && isParticipant() && (isReport() || isConfirm() || isReject()));
+    }
+  }
+}
