@@ -175,7 +175,8 @@ export default function Home() {
         <Modal title="Cómo funciona" onClose={() => setModal(null)}>
           <ol className="hm-how">
             <li><b>Categorías.</b> Cada jugador compite en su categoría, repartida en grupos.</li>
-            <li><b>Fase de grupos.</b> Todos contra todos dentro del grupo. Gana la clasificación quien más partidos gana; si empatan, cuenta la diferencia de sets y luego la de juegos.</li>
+            <li><b>Fase de grupos.</b> Todos contra todos dentro del grupo. La clasificación va por puntos: ganar el partido son 3 puntos, perderlo habiendo ganado un set es 1 punto y perderlo sin ganar ningún set son 0. </li>
+            <li><b>Partidos.</b> Al mejor de 3 sets. Si quedáis un set cada uno, según el tiempo que tengáis y lo que prefiráis, jugáis un tercer set o un súper tie-break (a 10 puntos con diferencia de 2).</li>
             <li><b>Resultados.</b> Al terminar, uno de los dos apunta el marcador y el rival lo confirma. Solo cuentan los partidos confirmados.</li>
             <li><b>Si no estáis de acuerdo,</b> el rival puede rechazarlo y el partido queda en discrepancia hasta que lo apuntéis bien o lo corrija la organización.</li>
           </ol>
@@ -200,7 +201,7 @@ function GroupRow({ group, matches, usersById, uid }) {
           <div className="hm-table-wrap">
             <table className="hm-table">
               <thead>
-                <tr><th className="c">#</th><th>Jugador/a</th><th className="c" title="Partidos jugados">PJ</th><th className="c" title="Partidos ganados">PG</th><th className="c" title="Partidos perdidos">PP</th><th className="c" title="Sets ganados y perdidos">Sets</th></tr>
+                <tr><th className="c">#</th><th>Jugador/a</th><th className="c" title="Partidos jugados">PJ</th><th className="c" title="Partidos ganados">PG</th><th className="c" title="Partidos perdidos">PP</th><th className="c" title="Sets ganados y perdidos">Sets</th><th className="c" title="Puntos">Pts</th></tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
@@ -211,13 +212,14 @@ function GroupRow({ group, matches, usersById, uid }) {
                     <td className="c">{r.pg}</td>
                     <td className="c">{r.pp}</td>
                     <td className="c">{r.sg}-{r.sp}</td>
+                    <td className="c"><b>{r.pts}</b></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <p className="hm-legend"><Info aria-hidden="true" /> PJ: partidos | PG: ganados | PP: perdidos. Solo cuentan los partidos confirmados.</p>
+        <p className="hm-legend"><Info aria-hidden="true" /> PJ: partidos | PG: ganados | PP: perdidos | Pts: puntos (victoria 3 · derrota ganando un set 1 · derrota 0). Solo cuentan los partidos confirmados.</p>
       </section>
 
       <section className="hm-card" aria-label={`Partidos ${group.name}`}>

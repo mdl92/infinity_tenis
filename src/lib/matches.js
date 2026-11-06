@@ -35,7 +35,7 @@ export function sortMatches(list, uid) {
 export function formatSets(sets = [], flip = false) {
   return sets.map((s, i) => {
     const [x, y] = flip ? [s.b, s.a] : [s.a, s.b];
-    if (isSuper(s, i)) return `STB ${x}-${y}`;
+    if (isSuper(s)) return `STB ${x}-${y}`;
     const tb = s.ta !== undefined && s.tb !== undefined ? ` (${flip ? s.tb : s.ta}-${flip ? s.ta : s.tb})` : '';
     return `${x}-${y}${tb}`;
   }).join(' · ');

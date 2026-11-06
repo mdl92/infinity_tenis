@@ -1,13 +1,29 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { loginAttempts } from '../lib/access';
+import { authUsernameOf, loginAttempts, loginKeys } from '../lib/access';
+
+/** Cuentas de acceso de los perfiles que entran con ese nombre (puede que se les cambiara el nombre). */
+async function accountsFor(identifier) {
+  if (identifier.includes('@')) return [];
+  const found = [];
+  for (const key of loginKeys(identifier)) {
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('username', '==', key)));
+      snap.forEach((d) => found.push(authUsernameOf(d.data())));
+    } catch {
+      // Si falla la búsqueda, se prueba igualmente con el nombre escrito
+    }
+  }
+  return found;
+}
 
 /** Inicia sesión con «nombre y primer apellido» + contraseña (o con email, para el primer admin). */
 async function loginWithName(identifier, password) {
   let lastError;
-  for (const attempt of loginAttempts(identifier, password)) {
+  const accounts = await accountsFor(identifier);
+  for (const attempt of loginAttempts(identifier, password, accounts)) {
     try {
       return await signInWithEmailAndPassword(auth, attempt.email, attempt.password);
     } catch (e) {

@@ -8,8 +8,11 @@ import { useDoc, useCollection } from '../hooks/useFirestore';
 import {
   confirmResult, formatSets, isParticipant, matchState, permissionMessage, rejectResult, saveResult, sideOf,
 } from '../lib/matches';
-import { cleanSets, formSets, isSuper, needsSuper, needsTiebreak, validateSets } from '../lib/tennis';
+import {
+  DECIDERS, cleanSets, deciderOf, formSets, isSuper, needsDecider, needsTiebreak, validateSets,
+} from '../lib/tennis';
 import { Avatar, CourtSvg, EmptyState } from '../components/ui.jsx';
+import { Segmented } from '../components/Select.jsx';
 
 const TITLES = {
   entry: 'Partido pendiente',
@@ -233,28 +236,26 @@ function StatusLine({ state, match, name, uid }) {
 
 function SetsView({ match, name }) {
   const sets = match.sets ?? [];
-  const normal = [0, 1].map((i) => sets.filter((x, k) => !isSuper(x, k))[i]);
-  const sup = sets.find((x, k) => isSuper(x, k));
-  const cols = sup ? 3 : 2;
+  const third = sets[2];
+  const cols = third ? 3 : 2;
+  const label = (x, i) => (isSuper(x) ? 'Súper TB' : `Set ${i + 1}`);
   return (
     <div className={`sets-grid cols-${cols}`}>
       <span />
-      <span className="set-label">Set 1</span>
-      <span className="set-label">Set 2</span>
-      {sup && <span className="set-label">Súper TB</span>}
+      {[0, 1, 2].slice(0, cols).map((i) => <span key={i} className="set-label">{label(sets[i], i)}</span>)}
       {[['a', match.player1Id], ['b', match.player2Id]].map(([side, pid]) => (
         <Fragment key={side}>
           <span className="person-name">{name(pid)}</span>
-          {normal.map((x, i) => {
+          {[0, 1, 2].slice(0, cols).map((i) => {
+            const x = sets[i];
             if (!x) return <span key={i} className="set-box empty">–</span>;
             const { games, other, tiebreak } = sideOf(x, side);
             return (
-              <span key={i} className={`set-box ${games > other ? 'won' : ''}`}>
+              <span key={i} className={`set-box ${isSuper(x) ? 'super' : ''} ${games > other ? 'won' : ''}`}>
                 {games}{tiebreak !== null && <sup className="tb" aria-label={`tie-break ${tiebreak}`}>{tiebreak}</sup>}
               </span>
             );
           })}
-          {sup && <span className={`set-box super ${sideOf(sup, side).games > sideOf(sup, side).other ? 'won' : ''}`}>{sideOf(sup, side).games}</span>}
         </Fragment>
       ))}
     </div>
@@ -266,24 +267,27 @@ const firstName = (n = '') => n.split(' ')[0];
 
 function ResultForm({ match, name, onSubmit, onCancel, busy, submitLabel }) {
   const [sets, setSets] = useState(() => formSets(match.sets));
+  const [decider, setDecider] = useState(() => deciderOf(match.sets));
   const [error, setError] = useState('');
 
   const change = (i, key, value) =>
     setSets((prev) => prev.map((x, j) => (j === i ? { ...x, [key]: digits(value) } : x)));
-  const superOn = needsSuper(sets);
+  const thirdOn = needsDecider(sets);
+  const isSuperTb = thirdOn && decider === DECIDERS.super;
   const players = [['a', match.player1Id], ['b', match.player2Id]];
+  // Sets con tie-break: los dos primeros y, si se jugó, el tercero
+  const tbSets = (thirdOn && !isSuperTb ? [0, 1, 2] : [0, 1]).filter((i) => needsTiebreak(sets[i].a, sets[i].b));
+  const thirdLabel = isSuperTb ? 'Súper TB' : 'Set 3';
 
   function handleSubmit(e) {
     e.preventDefault();
-    // Si ya no hace falta súper tie-break, lo que hubiera escrito no cuenta
-    const toSave = superOn ? sets : [sets[0], sets[1], { a: '', b: '' }];
-    const err = validateSets(toSave);
+    const err = validateSets(sets, decider);
     if (err) {
       setError(err);
       return;
     }
     setError('');
-    onSubmit(cleanSets(toSave));
+    onSubmit(cleanSets(sets, decider));
   }
 
   return (
@@ -292,7 +296,7 @@ function ResultForm({ match, name, onSubmit, onCancel, busy, submitLabel }) {
         <span />
         <span className="set-label">Set 1</span>
         <span className="set-label">Set 2</span>
-        <span className={`set-label ${superOn ? '' : 'off'}`}>Súper TB</span>
+        <span className={`set-label ${thirdOn ? '' : 'off'}`}>{thirdLabel}</span>
         {players.map(([side, pid]) => (
           <Fragment key={side}>
             <span className="person-name">{name(pid)}</span>
@@ -307,19 +311,31 @@ function ResultForm({ match, name, onSubmit, onCancel, busy, submitLabel }) {
               />
             ))}
             <input
-              aria-label={`${name(pid)}, puntos del súper tie-break`}
+              aria-label={isSuperTb ? `${name(pid)}, puntos del súper tie-break` : `${name(pid)}, juegos del set 3`}
               className="super"
               inputMode="numeric"
-              placeholder={superOn ? '0' : '–'}
-              disabled={!superOn}
-              value={superOn ? sets[2][side] : ''}
+              placeholder={thirdOn ? '0' : '–'}
+              disabled={!thirdOn}
+              value={thirdOn ? sets[2][side] : ''}
               onChange={(e) => change(2, side, e.target.value)}
             />
           </Fragment>
         ))}
       </div>
 
-      {[0, 1].filter((i) => needsTiebreak(sets[i].a, sets[i].b)).map((i) => (
+      {thirdOn && (
+        <div className="decider-row">
+          <p>Un set cada uno. ¿Cómo lo desempatasteis?</p>
+          <Segmented
+            label="Desempate"
+            value={decider}
+            onChange={setDecider}
+            options={[{ value: DECIDERS.set, label: 'Tercer set' }, { value: DECIDERS.super, label: 'Súper tie-break' }]}
+          />
+        </div>
+      )}
+
+      {tbSets.map((i) => (
         <div key={i} className="tb-row" role="group" aria-label={`Tie-break del set ${i + 1}`}>
           <p>Tie-break del set {i + 1} <span>· {sets[i].a}-{sets[i].b}</span></p>
           <div className="tb-inputs">
@@ -343,9 +359,9 @@ function ResultForm({ match, name, onSubmit, onCancel, busy, submitLabel }) {
       ))}
 
       <p className="result-hint">
-        {superOn
-          ? 'Un set cada uno: apunta el súper tie-break (a 10 puntos, con 2 de diferencia).'
-          : 'Dos sets. Si ganáis uno cada uno, se juega un súper tie-break. Con 7-6 te pediremos los puntos del tie-break.'}
+        {!thirdOn && 'Al mejor de 3 sets. Si ganáis uno cada uno, elegís entre tercer set o súper tie-break. Con 7-6 te pediremos los puntos del tie-break.'}
+        {thirdOn && isSuperTb && 'Súper tie-break: a 10 puntos, con 2 de diferencia.'}
+        {thirdOn && !isSuperTb && 'Tercer set: como los anteriores (6-0…6-4, 7-5 o 7-6).'}
       </p>
       {error && <p className="error" role="alert" style={{ textAlign: 'center' }}>{error}</p>}
       <div className="result-actions">

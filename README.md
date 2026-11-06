@@ -13,8 +13,8 @@ React (Vite) + Firebase (Auth + Firestore), desplegado en GitHub Pages.
   - Por dentro, Firebase usa un email interno que nadie ve (`laura-martin@jugadores-infinity.example.com`) y a la contraseña se le añade un sufijo fijo, porque Firebase exige 6 caracteres. Todo está en `src/lib/access.js`.
   - ⚠️ Como la contraseña sale del nombre, cualquiera que conozca el nombre de un jugador puede entrar como él. Es aceptable para un torneo entre conocidos; si no, conviene añadir un cambio de contraseña en el primer acceso.
 - **Discrepancias**: si el rival rechaza un resultado, el partido vuelve a *Por jugar* y queda marcado (`disputedBy`, `disputedSets`) para que se vea el aviso.
-- **Formato del partido**: 2 sets (6-0…6-4, 7-5 o 7-6). Un 7-6 lleva los puntos de su tie-break (se ven en pequeño junto a los juegos). Si quedan 1-1, se juega un súper tie-break a 10 en lugar del tercer set. Las reglas están en `validateSets` (`src/lib/tennis.js`).
-- Clasificación por grupo calculada con los partidos confirmados: 3 puntos por victoria (`POINTS_PER_WIN` en `src/lib/tennis.js`), desempate por dif. sets y dif. juegos.
+- **Formato del partido**: al mejor de 3 sets (6-0…6-4, 7-5 o 7-6). Un 7-6 lleva los puntos de su tie-break (se ven en pequeño junto a los juegos). Si quedan 1-1, los jugadores eligen al apuntar el resultado si jugaron un tercer set o un súper tie-break a 10 (según el tiempo y lo que prefieran). Las reglas están en `validateSets` (`src/lib/tennis.js`).
+- Clasificación por grupo calculada con los partidos confirmados, por puntos: victoria 3, derrota ganando un set 1, derrota sin ganar ningún set 0 (`POINTS` en `src/lib/tennis.js`). Desempate por dif. sets y dif. juegos.
 
 Los permisos no dependen solo de la interfaz: los fuerza `firestore.rules` en el servidor.
 
@@ -60,15 +60,16 @@ Se usa `HashRouter` (URLs con `#/`) para que recargar cualquier página funcione
 
 | Colección     | Campos principales |
 |---------------|--------------------|
-| `users/{uid}` | `name`, `firstName`, `lastName`, `secondLastName`, `username` (nombre + primer apellido, p. ej. `laura-martin`), `role` (`admin` \| `player`) |
+| `users/{uid}` | `name`, `firstName`, `lastName`, `secondLastName`, `username` (nombre + primer apellido, p. ej. `laura-martin`), `authUsername`, `authFirstName`, `authLastName` (con qué se creó la cuenta de acceso), `role` (`admin` \| `player`) |
 | `tournaments` | `name` |
 | `categories`  | `tournamentId`, `name` |
 | `groups`      | `tournamentId`, `categoryId`, `name`, `playerIds[]` |
-| `matches`     | `tournamentId`, `categoryId`, `groupId`, `player1Id`, `player2Id`, `status` (`pending` \| `reported` \| `confirmed`), `sets[{a,b,ta?,tb?}]` (+ `{a,b,super:true}` si hubo súper tie-break), `winnerId`, `reportedBy`, `confirmedBy`, `disputedBy`, `disputedSets` |
+| `matches`     | `tournamentId`, `categoryId`, `groupId`, `player1Id`, `player2Id`, `status` (`pending` \| `reported` \| `confirmed`), `sets[{a,b,ta?,tb?}]` (2 o 3 sets; el tercero es `{a,b,super:true}` si fue súper tie-break), `winnerId`, `reportedBy`, `confirmedBy`, `disputedBy`, `disputedSets` |
 
 ## Notas
 
 - **Alta de usuarios desde el cliente**: Firebase inicia sesión automáticamente con la cuenta recién creada, así que se crea en una instancia secundaria de la app (`createAuthAccount` en `src/firebase.js`) para no cerrar la sesión del admin.
+- **Editar usuarios** (*Administración › Jugadores › Editar*): nombre, apellidos y rol. Desde la web no se puede cambiar la cuenta de Firebase de otra persona, así que si se cambia el nombre o el primer apellido, el perfil guarda con qué datos se creó la cuenta (`authUsername`, `authFirstName`, `authLastName`): el jugador entra con el nombre nuevo (al iniciar sesión se busca por `username`) y **con la misma contraseña de siempre**.
 - **Dar de baja** borra el perfil y lo quita de sus grupos (ya no puede entrar); los partidos cuyo rival también estaba dado de baja se borran, pero la cuenta de Auth sigue existiendo; bórrala en la consola si quieres liberar el email.
 - **Enlace de acceso**: el botón *Enviar enlace de acceso* usa el email de restablecer contraseña de Firebase, así que ya puedes dar de alta con una contraseña cualquiera y que el jugador ponga la suya. Si más adelante quieres enlaces sin contraseña, mira *Email link sign-in* de Firebase Auth.
 - Lectura pública (para que se vean categorías, grupos y resultados sin entrar). Si prefieres que solo lo vean quienes han entrado, cambia `allow read: if true;` por `allow read: if signedIn();`.

@@ -207,7 +207,7 @@ function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRe
           <div className="hm-table-wrap">
             <table className="hm-table">
               <thead>
-                <tr><th className="c">#</th><th>Jugador/a</th><th className="c" title="Partidos jugados">PJ</th><th className="c" title="Partidos ganados">PG</th><th className="c" title="Partidos perdidos">PP</th><th className="c" title="Sets ganados y perdidos">Sets</th><th className="c" aria-label="Quitar" /></tr>
+                <tr><th className="c">#</th><th>Jugador/a</th><th className="c" title="Partidos jugados">PJ</th><th className="c" title="Partidos ganados">PG</th><th className="c" title="Partidos perdidos">PP</th><th className="c" title="Sets ganados y perdidos">Sets</th><th className="c" title="Puntos">Pts</th><th className="c" aria-label="Quitar" /></tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
@@ -218,6 +218,7 @@ function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRe
                     <td className="c">{r.pg}</td>
                     <td className="c">{r.pp}</td>
                     <td className="c">{r.sg}-{r.sp}</td>
+                    <td className="c"><b>{r.pts}</b></td>
                     <td className="c"><button type="button" className="icon-btn danger adm2-x" onClick={() => removePlayer(r.id)} aria-label={`Quitar a ${name(r.id)} del grupo`} title="Quitar del grupo"><X /></button></td>
                   </tr>
                 ))}

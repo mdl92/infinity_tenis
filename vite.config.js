@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    base: './',
+    base: '/infinity_tenis/',
     define: { __DEMO_MODE__: demo },
     resolve: {
       alias: demo

@@ -25,7 +25,7 @@ export default function MatchRows({ matches, usersById, uid, sub, children }) {
             {sets.map((s, k) => {
               const { games: mine, other, tiebreak } = sideOf(s, side);
               return (
-                <b key={k} className={`${mine > other ? 'w' : ''} ${isSuper(s, k) ? 'stb' : ''}`}>
+                <b key={k} className={`${mine > other ? 'w' : ''} ${isSuper(s) ? 'stb' : ''}`}>
                   {mine}{tiebreak !== null && <sup>{tiebreak}</sup>}
                 </b>
               );

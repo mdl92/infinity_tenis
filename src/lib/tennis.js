@@ -5,21 +5,25 @@ export const byName = (x, y) =>
   (x?.name ?? '').localeCompare(y?.name ?? '', 'es', { numeric: true, sensitivity: 'base' });
 
 /*
- * Formato del partido: 2 sets. Si quedan 1-1, se juega un súper tie-break en lugar del tercer set.
+ * Formato del partido: al mejor de 3. Si quedan 1-1, los jugadores eligen (según el tiempo y lo que
+ * acuerden) entre jugar un tercer set o un súper tie-break.
  * Un set que acaba 7-6 lleva además los puntos de su tie-break.
  *
- *   set normal:      { a, b }                 p. ej. 6-3
+ *   set normal:       { a, b }                 p. ej. 6-3
  *   set con tie-break:{ a, b, ta, tb }         p. ej. 7-6 (7-4) → { a: 7, b: 6, ta: 7, tb: 4 }
- *   súper tie-break: { a, b, super: true }    p. ej. 10-8
+ *   súper tie-break:  { a, b, super: true }    p. ej. 10-8 (solo como desempate, en lugar del tercer set)
  *
  * (a = jugador 1, b = jugador 2)
  */
 
+/** Formas de decidir un partido empatado a un set. */
+export const DECIDERS = { set: 'set', super: 'super' };
+
 /** ¿Este set necesita los puntos del tie-break? (7-6 o 6-7) */
 export const needsTiebreak = (a, b) => (Number(a) === 7 && Number(b) === 6) || (Number(a) === 6 && Number(b) === 7);
 
-/** ¿Hace falta súper tie-break? (cada uno ha ganado un set) */
-export function needsSuper(rawSets) {
+/** ¿Hace falta desempate (tercer set o súper tie-break)? (cada uno ha ganado un set) */
+export function needsDecider(rawSets) {
   const [s1, s2] = rawSets;
   if ([s1?.a, s1?.b, s2?.a, s2?.b].some((v) => v === '' || v === undefined)) return false;
   return (Number(s1.a) > Number(s1.b)) !== (Number(s2.a) > Number(s2.b));
@@ -45,18 +49,9 @@ function checkSet(s, n) {
   return null;
 }
 
-/** Devuelve un mensaje de error o null si el marcador es válido. */
-export function validateSets(rawSets) {
-  const [s1, s2, st] = rawSets;
-  const e1 = checkSet(s1, 1);
-  if (e1) return e1;
-  const e2 = checkSet(s2, 2);
-  if (e2) return e2;
-  const filled = st && (st.a !== '' || st.b !== '');
-  if (!needsSuper(rawSets)) {
-    return filled ? 'No hace falta súper tie-break: el mismo jugador ha ganado los dos sets.' : null;
-  }
-  if (!filled || st.a === '' || st.b === '') return 'Habéis ganado un set cada uno: pon el resultado del súper tie-break.';
+/** Comprueba un súper tie-break: a 10 puntos con 2 de diferencia. */
+function checkSuper(st) {
+  if (!st || st.a === '' || st.b === '') return 'Pon el resultado del súper tie-break.';
   if (!isInt(st.a) || !isInt(st.b)) return 'Los puntos del súper tie-break deben ser números enteros.';
   const [a, b] = [Number(st.a), Number(st.b)];
   if (Math.max(a, b) < 10 || Math.abs(a - b) < 2) return 'El súper tie-break se gana a 10 puntos con 2 de diferencia (p. ej. 10-7 o 12-10).';
@@ -64,28 +59,49 @@ export function validateSets(rawSets) {
   return null;
 }
 
+/**
+ * Devuelve un mensaje de error o null si el marcador es válido.
+ * `decider` dice cómo se desempató un 1-1: 'set' (tercer set) o 'super' (súper tie-break).
+ */
+export function validateSets(rawSets, decider) {
+  const [s1, s2, s3] = rawSets;
+  const e1 = checkSet(s1, 1);
+  if (e1) return e1;
+  const e2 = checkSet(s2, 2);
+  if (e2) return e2;
+  if (!needsDecider(rawSets)) return null;
+  if (decider === DECIDERS.set) return checkSet(s3 ?? { a: '', b: '' }, 3);
+  if (decider === DECIDERS.super) return checkSuper(s3);
+  return 'Habéis ganado un set cada uno: elige si jugasteis un tercer set o un súper tie-break.';
+}
+
 /** Convierte el formulario en sets numéricos (ya validados). */
-export function cleanSets(rawSets) {
-  const [s1, s2, st] = rawSets;
+export function cleanSets(rawSets, decider) {
+  const [s1, s2, s3] = rawSets;
   const set = (s) => (needsTiebreak(s.a, s.b)
     ? { a: Number(s.a), b: Number(s.b), ta: Number(s.ta), tb: Number(s.tb) }
     : { a: Number(s.a), b: Number(s.b) });
   const out = [set(s1), set(s2)];
-  if (needsSuper(rawSets)) out.push({ a: Number(st.a), b: Number(st.b), super: true });
+  if (needsDecider(rawSets)) {
+    out.push(decider === DECIDERS.super ? { a: Number(s3.a), b: Number(s3.b), super: true } : set(s3));
+  }
   return out;
 }
+
+const blankRow = { a: '', b: '', ta: '', tb: '' };
 
 /** Sets en formato de formulario (texto), para editar un resultado ya guardado. */
 export function formSets(sets = []) {
   const str = (v) => (v === undefined || v === null ? '' : String(v));
-  const normal = sets.filter((s, i) => !isSuper(s, i));
-  const sup = sets.find((s, i) => isSuper(s, i));
-  const row = (s) => ({ a: str(s?.a), b: str(s?.b), ta: str(s?.ta), tb: str(s?.tb) });
-  return [row(normal[0]), row(normal[1]), { a: str(sup?.a), b: str(sup?.b) }];
+  const row = (s) => (s ? { a: str(s.a), b: str(s.b), ta: str(s.ta), tb: str(s.tb) } : { ...blankRow });
+  return [row(sets[0]), row(sets[1]), row(sets[2])];
 }
 
-/** El tercer elemento siempre es el súper tie-break (también en datos antiguos sin la marca). */
-export const isSuper = (s, i) => Boolean(s?.super) || i === 2;
+/** Cómo se desempató un resultado ya guardado (por defecto, tercer set). */
+export const deciderOf = (sets = []) => (sets[2]?.super ? DECIDERS.super : DECIDERS.set);
+
+/** ¿Este set es un súper tie-break? (va marcado con `super: true`) */
+export const isSuper = (s) => Boolean(s?.super);
 
 export function winnerOf(match, sets) {
   const wonA = sets.filter((s) => s.a > s.b).length;
@@ -93,13 +109,13 @@ export function winnerOf(match, sets) {
   return wonA > wonB ? match.player1Id : match.player2Id;
 }
 
-/** Puntos de la clasificación por cada partido ganado. */
-export const POINTS_PER_WIN = 3;
+/** Puntos de la clasificación: victoria 3 · derrota ganando un set 1 · derrota sin ganar ningún set 0. */
+export const POINTS = { win: 3, lossWithSet: 1, loss: 0 };
 
 /** Clasificación de un grupo a partir de los partidos CONFIRMADOS. */
 export function computeStandings(playerIds, matches) {
   const rows = Object.fromEntries(
-    playerIds.map((id) => [id, { id, pj: 0, pg: 0, pp: 0, sg: 0, sp: 0, jg: 0, jp: 0 }])
+    playerIds.map((id) => [id, { id, pj: 0, pg: 0, pp: 0, sg: 0, sp: 0, jg: 0, jp: 0, pts: 0 }])
   );
 
   for (const m of matches) {
@@ -107,24 +123,26 @@ export function computeStandings(playerIds, matches) {
     const r1 = rows[m.player1Id];
     const r2 = rows[m.player2Id];
     if (!r1 || !r2) continue;
+    const setsWon = { a: 0, b: 0 };
 
     (m.sets ?? []).forEach((set, i) => {
       const { a, b } = set;
-      if (!isSuper(set, i)) {
+      if (!isSuper(set)) {
         r1.jg += a; r1.jp += b;
         r2.jg += b; r2.jp += a;
       }
-      if (a > b) { r1.sg++; r2.sp++; } else { r2.sg++; r1.sp++; }
+      if (a > b) { r1.sg++; r2.sp++; setsWon.a++; } else { r2.sg++; r1.sp++; setsWon.b++; }
     });
     r1.pj++; r2.pj++;
-    if (m.winnerId === m.player1Id) { r1.pg++; r2.pp++; } else { r2.pg++; r1.pp++; }
+    const [winner, loser, loserSets] = m.winnerId === m.player1Id ? [r1, r2, setsWon.b] : [r2, r1, setsWon.a];
+    winner.pg++; loser.pp++;
+    winner.pts += POINTS.win;
+    loser.pts += loserSets > 0 ? POINTS.lossWithSet : POINTS.loss;
   }
 
-  for (const r of Object.values(rows)) r.pts = r.pg * POINTS_PER_WIN;
-
-  // Desempate: victorias → diferencia de sets → diferencia de juegos
+  // Orden: puntos → diferencia de sets → diferencia de juegos
   return Object.values(rows).sort(
-    (x, y) => y.pg - x.pg || (y.sg - y.sp) - (x.sg - x.sp) || (y.jg - y.jp) - (x.jg - x.jp)
+    (x, y) => y.pts - x.pts || (y.sg - y.sp) - (x.sg - x.sp) || (y.jg - y.jp) - (x.jg - x.jp)
   );
 }
 

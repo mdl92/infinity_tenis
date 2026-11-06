@@ -1335,3 +1335,7 @@ sup.tb, .mrow-games sup, .sr-sets sup { font-size: .55em; font-weight: 700; line
 @media (min-width: 641px) {
   .hm-sheet { width: calc(100% - clamp(2rem, 5vw, 4rem)); }
 }
+
+/* ---------- Desempate a 1-1: tercer set o súper tie-break ---------- */
+.decider-row { display: grid; gap: .5rem; max-width: 540px; margin: .9rem auto 0; }
+.decider-row p { margin: 0; font-weight: 800; font-size: .92rem; text-align: center; }

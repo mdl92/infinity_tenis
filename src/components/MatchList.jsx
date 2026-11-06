@@ -22,7 +22,7 @@ function Line({ name, me, side, match }) {
           const s = sets[i];
           if (!s) return <b key={i} />;
           const { games: mine, other, tiebreak } = sideOf(s, side);
-          return <b key={i} className={`${mine > other ? 'w' : ''} ${isSuper(s, i) ? 'stb' : ''}`}>{mine}{tiebreak !== null && <sup>{tiebreak}</sup>}</b>;
+          return <b key={i} className={`${mine > other ? 'w' : ''} ${isSuper(s) ? 'stb' : ''}`}>{mine}{tiebreak !== null && <sup>{tiebreak}</sup>}</b>;
         })}
       </span>
     </div>

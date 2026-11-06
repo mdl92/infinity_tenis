@@ -1,4 +1,4 @@
-import { computeStandings, POINTS_PER_WIN } from '../lib/tennis';
+import { computeStandings, POINTS } from '../lib/tennis';
 import { Person } from './ui.jsx';
 
 export default function StandingsTable({ playerIds, matches, usersById, myId }) {
@@ -38,7 +38,7 @@ export default function StandingsTable({ playerIds, matches, usersById, myId }) 
         </table>
       </div>
       <p className="table-foot">
-        PJ jugados · PG ganados · PP perdidos. Solo cuentan los partidos confirmados: {POINTS_PER_WIN} puntos por victoria; desempate por diferencia de sets y de juegos.
+        PJ jugados · PG ganados · PP perdidos. Solo cuentan los partidos confirmados. Victoria: {POINTS.win} puntos · derrota ganando un set: {POINTS.lossWithSet} · derrota sin ganar ningún set: {POINTS.loss}. Si hay empate a puntos, cuenta la diferencia de sets y luego la de juegos.
       </p>
     </div>
   );
