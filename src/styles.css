@@ -1339,3 +1339,19 @@ sup.tb, .mrow-games sup, .sr-sets sup { font-size: .55em; font-weight: 700; line
 /* ---------- Desempate a 1-1: tercer set o súper tie-break ---------- */
 .decider-row { display: grid; gap: .5rem; max-width: 540px; margin: .9rem auto 0; }
 .decider-row p { margin: 0; font-weight: 800; font-size: .92rem; text-align: center; }
+
+/* ---------- Clasificaciones en el móvil: se deslizan hacia los lados en lugar de cortarse ---------- */
+.hm-table-wrap, .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.hm-table-wrap .hm-table th, .hm-table-wrap .hm-table td { white-space: nowrap; }
+@media (max-width: 640px) {
+  /* Ancho mínimo: si la pantalla es más estrecha, la tabla se desliza y se ve entera */
+  .hm-table-wrap .hm-table { min-width: 420px; }
+  .standings { min-width: 480px; }
+  /* Todas las columnas visibles y los nombres completos */
+  .table.standings .hide-sm { display: table-cell; }
+  .hm-person > span:last-child,
+  .adm2 .hm-person > span:last-child { overflow: visible; text-overflow: clip; white-space: nowrap; }
+}
+@media (max-width: 360px) {
+  .adm2 .hm-group .hm-table th:nth-child(6), .adm2 .hm-group .hm-table td:nth-child(6) { display: table-cell; }
+}
