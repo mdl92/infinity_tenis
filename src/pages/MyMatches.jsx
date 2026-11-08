@@ -4,6 +4,7 @@ import { useCollection } from '../hooks/useFirestore';
 import { sortMatches } from '../lib/matches';
 import { EmptyState, PageHead } from '../components/ui.jsx';
 import MatchList from '../components/MatchList.jsx';
+import { isBye, matchPlace } from '../lib/bracket';
 
 export default function MyMatches() {
   const { user } = useAuth();
@@ -14,14 +15,13 @@ export default function MyMatches() {
   const [tab, setTab] = useState('open');
 
   const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
-  const groupsById = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g])), [groups]);
 
-  const all = sortMatches([...asP1, ...asP2], user.uid);
+  const all = sortMatches([...asP1, ...asP2].filter((m) => !isBye(m)), user.uid);
   const open = all.filter((m) => m.status !== 'confirmed');
   const done = all.filter((m) => m.status === 'confirmed');
   const shown = tab === 'open' ? open : done;
 
-  const extra = (m) => groupsById[m.groupId]?.name;
+  const extra = (m) => matchPlace(m, groups);
 
   return (
     <>

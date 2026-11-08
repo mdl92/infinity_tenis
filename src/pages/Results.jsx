@@ -5,6 +5,7 @@ import { useCollection, useMatches } from '../hooks/useFirestore';
 import { byName } from '../lib/tennis';
 import { EmptyState, PageHead } from '../components/ui.jsx';
 import MatchList from '../components/MatchList.jsx';
+import { isBye, matchPlace } from '../lib/bracket';
 
 /** Resultados confirmados del torneo, públicos. */
 export default function Results() {
@@ -18,14 +19,13 @@ export default function Results() {
   const [cat, setCat] = useState('');
 
   const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
-  const groupsById = useMemo(() => Object.fromEntries(groups.map((g) => [g.id, g])), [groups]);
   const catsById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories]);
 
   const shown = matches
-    .filter((m) => m.status === 'confirmed' && (!cat || m.categoryId === cat))
+    .filter((m) => m.status === 'confirmed' && !isBye(m) && (!cat || m.categoryId === cat))
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
 
-  const extra = (m) => [catsById[m.categoryId]?.name, groupsById[m.groupId]?.name].filter(Boolean).join(' · ');
+  const extra = (m) => [catsById[m.categoryId]?.name, matchPlace(m, groups)].filter(Boolean).join(' · ');
 
   return (
     <>

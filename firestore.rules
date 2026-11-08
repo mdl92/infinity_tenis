@@ -64,8 +64,31 @@ service cloud.firestore {
           && changed().hasOnly(['sets', 'status', 'reportedBy', 'winnerId', 'disputedBy', 'disputedSets', 'updatedAt']);
       }
 
+      // Eliminatoria: al confirmarse un partido, cualquiera con sesión puede crear el de la ronda siguiente,
+      // pero solo con su ID fijo (ko_<categoría>_<ronda>_<posición>), vacío y con los dos ganadores
+      // confirmados de los partidos anteriores (ronda - 1, posiciones 2·pos y 2·pos + 1).
+      function koId(cat, round, slot) {
+        return 'ko_' + cat + '_' + string(round) + '_' + string(slot);
+      }
+      function isAdvance(matchId) {
+        let d = request.resource.data;
+        let f1 = get(/databases/$(database)/documents/matches/$(koId(d.categoryId, d.round - 1, d.slot * 2))).data;
+        let f2 = get(/databases/$(database)/documents/matches/$(koId(d.categoryId, d.round - 1, d.slot * 2 + 1))).data;
+        return signedIn()
+          && d.keys().hasOnly(['tournamentId', 'categoryId', 'groupId', 'round', 'slot', 'rounds', 'player1Id', 'player2Id',
+                               'status', 'sets', 'winnerId', 'reportedBy', 'confirmedBy', 'createdAt'])
+          && d.round is int && d.slot is int && d.round > 0 && d.round < d.rounds
+          && matchId == koId(d.categoryId, d.round, d.slot)
+          && f1.status == 'confirmed' && f2.status == 'confirmed'
+          && d.player1Id == f1.winnerId && d.player2Id == f2.winnerId
+          && d.tournamentId == f1.tournamentId && d.categoryId == f1.categoryId && d.rounds == f1.rounds
+          && d.groupId == null && d.status == 'pending' && d.sets.size() == 0
+          && d.winnerId == null && d.reportedBy == null && d.confirmedBy == null;
+      }
+
       allow read: if true;
-      allow create, delete: if isAdmin();
+      allow create: if isAdmin() || isAdvance(id);
+      allow delete: if isAdmin();
       allow update: if isAdmin()
         || (signedIn() && isParticipant() && (isReport() || isConfirm() || isReject()));
     }

@@ -2,6 +2,7 @@
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { isSuper, winnerOf } from './tennis';
+import { advance, checkWinnerChange, isKoMatch } from './bracket';
 
 export const isParticipant = (m, uid) => Boolean(uid) && (uid === m.player1Id || uid === m.player2Id);
 
@@ -52,17 +53,34 @@ export const sideOf = (s, side) => ({
 
 const ref = (m) => doc(db, 'matches', m.id);
 
-/** Un jugador envía el resultado (queda pendiente del rival); un admin lo deja confirmado. */
-export function saveResult(m, sets, uid, asAdmin) {
-  const winnerId = winnerOf(m, sets);
-  const base = { sets, winnerId, disputedBy: null, disputedSets: null, updatedAt: serverTimestamp() };
-  return updateDoc(ref(m), asAdmin
-    ? { ...base, status: 'confirmed', reportedBy: m.reportedBy ?? uid, confirmedBy: uid }
-    : { ...base, status: 'reported', reportedBy: uid });
+/** En la eliminatoria, el ganador pasa a la ronda siguiente. Si falla, el cuadro lo reintenta al verse. */
+async function moveOn(m, asAdmin) {
+  if (!isKoMatch(m)) return;
+  try {
+    await advance(m, { asAdmin });
+  } catch (e) {
+    console.error('No se pudo pasar de ronda:', e);
+  }
 }
 
-export const confirmResult = (m, uid) =>
-  updateDoc(ref(m), { status: 'confirmed', confirmedBy: uid, updatedAt: serverTimestamp() });
+/** Un jugador envía el resultado (queda pendiente del rival); un admin lo deja confirmado. */
+export async function saveResult(m, sets, uid, asAdmin) {
+  const winnerId = winnerOf(m, sets);
+  if (asAdmin && isKoMatch(m)) {
+    const problem = await checkWinnerChange(m, winnerId);
+    if (problem) throw Object.assign(new Error(problem), { code: 'bracket' });
+  }
+  const base = { sets, winnerId, disputedBy: null, disputedSets: null, updatedAt: serverTimestamp() };
+  await updateDoc(ref(m), asAdmin
+    ? { ...base, status: 'confirmed', reportedBy: m.reportedBy ?? uid, confirmedBy: uid }
+    : { ...base, status: 'reported', reportedBy: uid });
+  if (asAdmin) await moveOn({ ...m, status: 'confirmed', winnerId }, true);
+}
+
+export async function confirmResult(m, uid) {
+  await updateDoc(ref(m), { status: 'confirmed', confirmedBy: uid, updatedAt: serverTimestamp() });
+  await moveOn({ ...m, status: 'confirmed' }, false);
+}
 
 /** El rival no está de acuerdo: se borra el marcador y queda constancia de la discrepancia. */
 export const rejectResult = (m, uid) =>
@@ -71,6 +89,6 @@ export const rejectResult = (m, uid) =>
     disputedBy: uid, disputedSets: m.sets ?? [], updatedAt: serverTimestamp(),
   });
 
-export const permissionMessage = (e) => (e?.code === 'permission-denied'
+export const permissionMessage = (e) => (e?.code === 'bracket' ? e.message : e?.code === 'permission-denied'
   ? 'No tienes permiso para este cambio. Puede que el partido se haya actualizado: recarga la página.'
   : 'No se ha podido guardar. Revisa tu conexión e inténtalo de nuevo.');

@@ -12,11 +12,13 @@ React (Vite) + Firebase (Auth + Firestore), desplegado en GitHub Pages.
   - Cada persona entra con su **nombre y primer apellido** (sin importar mayúsculas ni tildes) y una **contraseña automática**: inicial del nombre + primer apellido (Laura Martín → `lmartin`).
   - Por dentro, Firebase usa un email interno que nadie ve (`laura-martin@jugadores-infinity.example.com`) y a la contraseña se le añade un sufijo fijo, porque Firebase exige 6 caracteres. Todo está en `src/lib/access.js`.
   - ⚠️ Como la contraseña sale del nombre, cualquiera que conozca el nombre de un jugador puede entrar como él. Es aceptable para un torneo entre conocidos; si no, conviene añadir un cambio de contraseña en el primer acceso.
+- **Tipo de torneo por categoría**: al crear una categoría se elige *Torneo de grupos* (todos contra todos con clasificación) o *Eliminatoria* (cuadro por rondas). Solo se puede cambiar mientras la categoría está vacía.
+- **Eliminatoria**: el admin añade los jugadores y sortea el cuadro **al azar** o **por cabezas de serie** (en el orden de la lista: el 1.º y el 2.º solo se cruzan en la final). Si el número de jugadores no es potencia de 2, los mejores cabezas de serie *pasan directo* a la segunda ronda. Al confirmarse un partido, el ganador pasa solo a la siguiente ronda; *Rehacer sorteo* borra el cuadro y deja los jugadores. La lógica está en `src/lib/bracket.js`.
 - **Discrepancias**: si el rival rechaza un resultado, el partido vuelve a *Por jugar* y queda marcado (`disputedBy`, `disputedSets`) para que se vea el aviso.
 - **Formato del partido**: al mejor de 3 sets (6-0…6-4, 7-5 o 7-6). Un 7-6 lleva los puntos de su tie-break (se ven en pequeño junto a los juegos). Si quedan 1-1, los jugadores eligen al apuntar el resultado si jugaron un tercer set o un súper tie-break a 10 (según el tiempo y lo que prefieran). Las reglas están en `validateSets` (`src/lib/tennis.js`).
 - Clasificación por grupo calculada con los partidos confirmados, por puntos: victoria 3, derrota ganando un set 1, derrota sin ganar ningún set 0 (`POINTS` en `src/lib/tennis.js`). Desempate por dif. sets y dif. juegos.
 
-Los permisos no dependen solo de la interfaz: los fuerza `firestore.rules` en el servidor.
+Los permisos no dependen solo de la interfaz: los fuerza `firestore.rules` en el servidor. Los jugadores solo pueden crear un partido: el de la ronda siguiente de una eliminatoria, y las reglas comprueban que sus dos jugadores son los ganadores confirmados de los partidos anteriores.
 
 ## Puesta en marcha
 
@@ -62,9 +64,10 @@ Se usa `HashRouter` (URLs con `#/`) para que recargar cualquier página funcione
 |---------------|--------------------|
 | `users/{uid}` | `name`, `firstName`, `lastName`, `secondLastName`, `username` (nombre + primer apellido, p. ej. `laura-martin`), `authUsername`, `authFirstName`, `authLastName` (con qué se creó la cuenta de acceso), `role` (`admin` \| `player`) |
 | `tournaments` | `name` |
-| `categories`  | `tournamentId`, `name` |
+| `categories`  | `tournamentId`, `name`, `format` (`groups` \| `knockout`) |
+| `categories` (eliminatoria) | además: `format: 'knockout'`, `playerIds[]` (por orden de cabeza de serie), `drawn`, `drawSize`, `rounds` |
 | `groups`      | `tournamentId`, `categoryId`, `name`, `playerIds[]` |
-| `matches`     | `tournamentId`, `categoryId`, `groupId`, `player1Id`, `player2Id`, `status` (`pending` \| `reported` \| `confirmed`), `sets[{a,b,ta?,tb?}]` (2 o 3 sets; el tercero es `{a,b,super:true}` si fue súper tie-break), `winnerId`, `reportedBy`, `confirmedBy`, `disputedBy`, `disputedSets` |
+| `matches`     | `tournamentId`, `categoryId`, `groupId`, `player1Id`, `player2Id`, `status` (`pending` \| `reported` \| `confirmed`), `sets[{a,b,ta?,tb?}]` (2 o 3 sets; el tercero es `{a,b,super:true}` si fue súper tie-break), `winnerId`, `reportedBy`, `confirmedBy`, `disputedBy`, `disputedSets`. En la eliminatoria, ID fijo `ko_<categoría>_<ronda>_<posición>` y además `round`, `slot`, `rounds` (y `bye: true` si pasa directo) |
 
 ## Notas
 

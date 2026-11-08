@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useTournament } from '../../context/TournamentContext.jsx';
 import { useCollection } from '../../hooks/useFirestore';
 import { byCategory } from '../../lib/tennis';
-import { clubPhoto } from '../../components/ui.jsx';
+import { clubPhoto, FooterLogo } from '../../components/ui.jsx';
 import Select from '../../components/Select.jsx';
 import { TournamentModal } from './AdminModals.jsx';
 import FloatingDock from '../../components/FloatingDock.jsx';
@@ -74,6 +74,8 @@ export default function AdminLayout() {
       <main className="hm-sheet">
         <Outlet />
       </main>
+
+      <FooterLogo onPhoto />
 
       {modal && (
         <TournamentModal

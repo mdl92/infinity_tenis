@@ -3,7 +3,8 @@ import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/fi
 import { db } from '../../firebase';
 import { deleteWithChildren } from '../../lib/data';
 import { Modal } from '../../components/ui.jsx';
-import Select from '../../components/Select.jsx';
+import Select, { Segmented } from '../../components/Select.jsx';
+import { FORMATS } from '../../lib/bracket';
 
 // Modales de organización: torneo, categoría y grupo.
 
@@ -65,16 +66,19 @@ export function TournamentModal({ tournament, onClose, onCreated }) {
   );
 }
 
-export function CategoryModal({ tournamentId, category, onClose }) {
+/** `canChangeFormat`: el formato solo se puede cambiar mientras la categoría está vacía. */
+export function CategoryModal({ tournamentId, category, canChangeFormat = true, onClose }) {
   const [name, setName] = useState(category?.name ?? '');
+  const [format, setFormat] = useState(category?.format ?? FORMATS.groups);
   const [busy, setBusy] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
     if (!name.trim()) return;
     setBusy(true);
-    if (category) await updateDoc(doc(db, 'categories', category.id), { name: name.trim() });
-    else await addDoc(collection(db, 'categories'), { tournamentId, name: name.trim(), createdAt: serverTimestamp() });
+    const data = { name: name.trim(), ...(canChangeFormat ? { format } : {}) };
+    if (category) await updateDoc(doc(db, 'categories', category.id), data);
+    else await addDoc(collection(db, 'categories'), { tournamentId, ...data, playerIds: [], createdAt: serverTimestamp() });
     onClose();
   }
 
@@ -85,6 +89,18 @@ export function CategoryModal({ tournamentId, category, onClose }) {
           <span>Nombre de la categoría</span>
           <input autoFocus placeholder="p. ej. Femenina" value={name} onChange={(e) => setName(e.target.value)} required />
         </label>
+        <div className="field">
+          <span>Tipo de torneo</span>
+          <Segmented label="Tipo de torneo" value={format} onChange={canChangeFormat ? setFormat : () => {}}
+            options={[{ value: FORMATS.groups, label: 'Torneo de grupos' }, { value: FORMATS.knockout, label: 'Eliminatoria' }]} />
+          <span className="field-hint">
+            {!canChangeFormat
+              ? 'No se puede cambiar: la categoría ya tiene grupos, jugadores o cuadro.'
+              : format === FORMATS.groups
+                ? 'Grupos de todos contra todos con clasificación por puntos.'
+                : 'Cuadro por rondas: quien pierde queda eliminado y el ganador pasa a la siguiente ronda.'}
+          </span>
+        </div>
         <div className="modal-actions">
           <button type="button" className="btn btn-soft" onClick={onClose}>Cancelar</button>
           <button className="btn btn-primary" disabled={busy || !name.trim()}>{category ? 'Guardar' : 'Crear categoría'}</button>

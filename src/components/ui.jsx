@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
-import club from '../assets/club.jpg';
+import club from '../assets/render_club.png';
 import infinityLogo from '../assets/infinity-yellow.svg';
 
 /** Pelota de tenis ilustrada (amarilla, con costuras blancas). */
@@ -85,6 +85,19 @@ export function Logo({ to = '/', light = false, word = true }) {
 /** El símbolo solo, en grande (para el cartel). */
 export function InfinityMark({ className = '' }) {
   return <img className={`infinity-mark ${className}`} src={infinityLogo} alt="" aria-hidden="true" />;
+}
+
+/**
+ * Logo de Infinity centrado debajo de la tarjeta principal de cada página.
+ * `onPhoto`: en blanco, sobre la foto del club; si no, en azul marino sobre el fondo claro.
+ * (Se pinta con una máscara del logo para poder darle cualquier color.)
+ */
+export function FooterLogo({ onPhoto = false }) {
+  return (
+    <footer className={`foot-logo ${onPhoto ? 'on-photo' : ''}`}>
+      <span role="img" aria-label="Infinity" style={{ '--logo': `url(${infinityLogo})` }} />
+    </footer>
+  );
 }
 
 /** Recortes distintos de la foto del club para dar variedad a las tarjetas. */

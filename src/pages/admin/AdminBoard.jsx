@@ -15,6 +15,8 @@ import MatchRows from '../../components/MatchRows.jsx';
 import Select from '../../components/Select.jsx';
 import Match from '../Match.jsx';
 import { CategoryModal, GroupModal, TournamentModal } from './AdminModals.jsx';
+import AdminKnockout from './AdminKnockout.jsx';
+import { isKnockout, matchPlace } from '../../lib/bracket';
 
 const toReview = (m) => m.status === 'reported' || (m.status === 'pending' && m.disputedBy);
 const catTitle = (c) => (/^categor/i.test(c.name) ? c.name : `Categoría ${c.name}`);
@@ -50,9 +52,13 @@ export default function AdminBoard() {
 
   // Lo pendiente
   const review = matches.filter(toReview);
-  const placed = new Set(groups.flatMap((g) => g.playerIds ?? []));
+  const placed = new Set([
+    ...groups.flatMap((g) => g.playerIds ?? []),
+    ...categories.filter(isKnockout).flatMap((c) => c.playerIds ?? []),
+  ]);
   const loose = users.filter((u) => u.role !== 'admin' && !placed.has(u.id)).sort(byName);
   const groupLabel = (g) => `${categories.find((c) => c.id === g.categoryId)?.name ?? ''} · ${g.name}`;
+  const matchLabel = (m) => `${categories.find((c) => c.id === m.categoryId)?.name ?? ''} · ${matchPlace(m, groups) ?? ''}`;
 
   if (!loading && !active) {
     return (
@@ -70,7 +76,11 @@ export default function AdminBoard() {
     await deleteWithChildren('categories', c.id, 'categoryId', ['groups', 'matches']);
     setCatId(null);
   }
-  const playersIn = (c) => new Set(groups.filter((g) => g.categoryId === c.id).flatMap((g) => g.playerIds ?? [])).size;
+  const playersIn = (c) => (isKnockout(c)
+    ? (c.playerIds ?? []).length
+    : new Set(groups.filter((g) => g.categoryId === c.id).flatMap((g) => g.playerIds ?? [])).size);
+  const ko = isKnockout(cat);
+  const isEmpty = (c) => !groups.some((g) => g.categoryId === c.id) && !(c.playerIds ?? []).length && !c.drawn;
 
   return (
     <>
@@ -106,7 +116,7 @@ export default function AdminBoard() {
         </nav>
         {cat && (
           <div className="hm-tools">
-            <button type="button" className="hm-tool" onClick={() => setModal({ kind: 'category', item: cat })}><Pencil aria-hidden="true" /> Renombrar</button>
+            <button type="button" className="hm-tool" onClick={() => setModal({ kind: 'category', item: cat })}><Pencil aria-hidden="true" /> Editar</button>
             <button type="button" className="hm-tool danger" onClick={() => removeCategory(cat)}><Trash2 aria-hidden="true" /> Eliminar</button>
           </div>
         )}
@@ -122,9 +132,17 @@ export default function AdminBoard() {
         <section className="hm-cat" aria-labelledby="adm-cat-title">
           <div className="hm-cat-head">
             <h2 id="adm-cat-title">{catTitle(cat)}</h2>
-            <span className="hm-meta">{catGroups.length} {catGroups.length === 1 ? 'grupo' : 'grupos'} · {playersIn(cat)} jugadores</span>
-            <button type="button" className="hm-tool adm2-head-btn" onClick={() => setModal({ kind: 'group', categoryId: cat.id })}><Plus aria-hidden="true" /> Nuevo grupo</button>
+            <span className="hm-meta">
+              {ko ? 'Eliminatoria' : `${catGroups.length} ${catGroups.length === 1 ? 'grupo' : 'grupos'}`} · {playersIn(cat)} jugadores
+            </span>
+            {!ko && <button type="button" className="hm-tool adm2-head-btn" onClick={() => setModal({ kind: 'group', categoryId: cat.id })}><Plus aria-hidden="true" /> Nuevo grupo</button>}
           </div>
+          {ko ? (
+            <div className="hm-groups">
+              <AdminKnockout category={cat} users={users} usersById={usersById}
+                matches={allMatches.filter((m) => m.categoryId === cat.id)} />
+            </div>
+          ) : (
           <div className="hm-groups">
             {catGroups.length === 0 && <p className="hm-empty">Esta categoría aún no tiene grupos. Crea el primero con «Nuevo grupo».</p>}
             {catGroups.map((g) => (
@@ -134,12 +152,13 @@ export default function AdminBoard() {
                 onRename={() => setModal({ kind: 'group', item: g })} />
             ))}
           </div>
+          )}
         </section>
       )}
 
       {modal?.kind === 'tournament' && <TournamentModal tournament={null} onClose={close} onCreated={choose} />}
       {modal?.kind === 'category' && (
-        <CategoryModal tournamentId={tid} category={modal.item ?? null} onClose={close} />
+        <CategoryModal tournamentId={tid} category={modal.item ?? null} canChangeFormat={!modal.item || isEmpty(modal.item)} onClose={close} />
       )}
       {modal?.kind === 'group' && (
         <GroupModal tournamentId={tid} categories={cats} group={modal.item ?? null} defaultCategoryId={modal.categoryId} onClose={close} />
@@ -150,7 +169,7 @@ export default function AdminBoard() {
           onCreated={(id) => setModal({ ...modal, matchId: id })} />
       )}
       {modal?.kind === 'review' && (
-        <ReviewModal list={review} name={name} groupLabel={(m) => groupLabel(groups.find((g) => g.id === m.groupId) ?? {})}
+        <ReviewModal list={review} name={name} groupLabel={matchLabel}
           onOpen={(m) => setModal({ kind: 'cell', group: groups.find((g) => g.id === m.groupId), pair: [m.player1Id, m.player2Id], matchId: m.id })}
           onClose={close} />
       )}
@@ -267,7 +286,7 @@ function CellModal({ group, pair, match, name, onClose, onCreated }) {
   }
 
   return (
-    <Modal title={title} description={group?.name} onClose={onClose}>
+    <Modal title={title} description={group?.name ?? (match && matchPlace(match))} onClose={onClose}>
       {!match ? (
         <form onSubmit={create}>
           <p className="serif modal-lead">Este partido todavía no existe.</p>

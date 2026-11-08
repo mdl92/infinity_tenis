@@ -11,6 +11,7 @@ import {
   authPassword, authUsernameOf, emailFor, initialPassword, passwordOf, usernameOf,
 } from '../../lib/access';
 import { byName } from '../../lib/tennis';
+import { isKnockout } from '../../lib/bracket';
 import { Avatar, Modal } from '../../components/ui.jsx';
 import { Segmented } from '../../components/Select.jsx';
 
@@ -30,8 +31,11 @@ export default function AdminUsers() {
   const { active } = useTournament();
   const { data: groups } = useCollection('groups', [['tournamentId', '==', active?.id]]);
   const { data: categories } = useCollection('categories', [['tournamentId', '==', active?.id]]);
-  const groupsOf = (id) => groups.filter((g) => g.playerIds?.includes(id))
-    .map((g) => `${categories.find((c) => c.id === g.categoryId)?.name ?? ''} · ${g.name}`);
+  const groupsOf = (id) => [
+    ...groups.filter((g) => g.playerIds?.includes(id))
+      .map((g) => `${categories.find((c) => c.id === g.categoryId)?.name ?? ''} · ${g.name}`),
+    ...categories.filter((c) => isKnockout(c) && c.playerIds?.includes(id)).map((c) => `${c.name} · Eliminatoria`),
+  ];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [msg, setMsg] = useState({ type: '', text: '' });
@@ -41,6 +45,8 @@ export default function AdminUsers() {
     const batch = writeBatch(db);
     const groups = await getDocs(query(collection(db, 'groups'), where('playerIds', 'array-contains', u.id)));
     groups.forEach((g) => batch.update(g.ref, { playerIds: arrayRemove(u.id) }));
+    const kos = await getDocs(query(collection(db, 'categories'), where('playerIds', 'array-contains', u.id)));
+    kos.forEach((c) => batch.update(c.ref, { playerIds: arrayRemove(u.id) }));
     // Partidos en los que el rival también está dado de baja: ya no tienen sentido, se borran
     const ids = new Set(users.map((x) => x.id));
     ids.delete(u.id);

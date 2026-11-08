@@ -8,6 +8,7 @@ import { matchState, sortMatches } from '../lib/matches';
 import { computeStandings } from '../lib/tennis';
 import { CourtSvg, EmptyState } from '../components/ui.jsx';
 import MatchList from '../components/MatchList.jsx';
+import { isBye, matchPlace } from '../lib/bracket';
 
 export default function Dashboard() {
   const { profile, user, isAdmin } = useAuth();
@@ -31,12 +32,12 @@ export default function Dashboard() {
   const rows = group ? computeStandings(group.playerIds ?? [], groupMatches) : [];
   const pos = rows.findIndex((r) => r.id === uid) + 1;
 
-  const mine = sortMatches([...asP1, ...asP2], uid);
+  const mine = sortMatches([...asP1, ...asP2].filter((m) => !isBye(m)), uid);
   const upcoming = mine.filter((m) => m.status !== 'confirmed');
   const toConfirm = upcoming.filter((m) => matchState(m, uid).key === 'todo');
   const firstName = (profile?.name ?? '').split(' ')[0];
 
-  const extra = (m) => [catsById[m.categoryId]?.name, myGroups.find((g) => g.id === m.groupId)?.name].filter(Boolean).join(' · ');
+  const extra = (m) => [catsById[m.categoryId]?.name, matchPlace(m, myGroups)].filter(Boolean).join(' · ');
 
   return (
     <>

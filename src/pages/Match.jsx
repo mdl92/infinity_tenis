@@ -11,6 +11,7 @@ import {
 import {
   DECIDERS, cleanSets, deciderOf, formSets, isSuper, needsDecider, needsTiebreak, validateSets,
 } from '../lib/tennis';
+import { isKoMatch, roundName } from '../lib/bracket';
 import { Avatar, CourtSvg, EmptyState } from '../components/ui.jsx';
 import { Segmented } from '../components/Select.jsx';
 
@@ -83,7 +84,11 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
   };
 
   const title = showForm ? 'Introducir resultado' : TITLES[state.key];
-  const back = mine ? { to: '/partidos', label: 'Volver a mis partidos' } : { to: `/grupo/${match.groupId}`, label: 'Volver al grupo' };
+  const ko = isKoMatch(match);
+  const place = ko ? roundName(match.round, match.rounds) : group?.name;
+  const back = mine ? { to: '/partidos', label: 'Volver a mis partidos' }
+    : ko ? { to: '/', label: 'Volver al cuadro' }
+      : { to: `/grupo/${match.groupId}`, label: 'Volver al grupo' };
 
   const resultSection = (
     <section className="result-bottom" aria-label="Resultado">
@@ -123,7 +128,7 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
       )}
       {error && <p className="error" role="alert" style={{ textAlign: 'center', marginTop: '1rem' }}>{error}</p>}
 
-      {isAdmin && (
+      {isAdmin && !ko && (
         <div className="result-actions" style={{ marginTop: '1rem' }}>
           <button className="btn btn-ghost btn-danger btn-sm" disabled={busy} onClick={remove}>Eliminar partido</button>
         </div>
@@ -146,7 +151,7 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
       <Link className="link-back" to={back.to}><ArrowLeft /> {back.label}</Link>
       <header className="page-head" style={{ marginBottom: '1.5rem' }}>
         <div>
-          <p className="eyebrow">{[category?.name, group?.name].filter(Boolean).join(' · ') || 'Partido'}</p>
+          <p className="eyebrow">{[category?.name, place].filter(Boolean).join(' · ') || 'Partido'}</p>
           <h1>{title}</h1>
         </div>
         <span className={`tag tag-${state.tone}`}>{state.label}</span>
@@ -170,7 +175,7 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
 
           <div className="faceoff-meta">
             {category && <span><Layers aria-hidden="true" /> {category.name}</span>}
-            {group && <span><LayoutGrid aria-hidden="true" /> {group.name}</span>}
+            {place && <span><LayoutGrid aria-hidden="true" /> {place}</span>}
           </div>
         </div>
 
@@ -210,7 +215,7 @@ function StatusLine({ state, match, name, uid }) {
       return (
         <div className="notice notice-green" role="status">
           <CircleCheck aria-hidden="true" />
-          <span>Resultado confirmado. Ya cuenta para la clasificación.</span>
+          <span>{isKoMatch(match) ? 'Resultado confirmado. El ganador pasa a la siguiente ronda.' : 'Resultado confirmado. Ya cuenta para la clasificación.'}</span>
         </div>
       );
     case 'dispute':

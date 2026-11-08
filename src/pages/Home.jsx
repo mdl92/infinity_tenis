@@ -8,10 +8,12 @@ import { TournamentSelect, useTournament } from '../context/TournamentContext.js
 import { useCollection, useMatches } from '../hooks/useFirestore';
 import { matchState, sortMatches } from '../lib/matches';
 import { byCategory, byName, computeStandings } from '../lib/tennis';
-import { Avatar, clubPhoto, Modal } from '../components/ui.jsx';
+import { Avatar, clubPhoto, FooterLogo, Modal } from '../components/ui.jsx';
 import LoginForm from '../components/LoginBanner.jsx';
 import MatchRows from '../components/MatchRows.jsx';
 import FloatingDock from '../components/FloatingDock.jsx';
+import Bracket from '../components/Bracket.jsx';
+import { isBye, isKnockout, matchPlace } from '../lib/bracket';
 
 const dayFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
 const day = (iso) => {
@@ -46,16 +48,22 @@ export default function Home() {
 
   const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const cats = [...categories].sort(byCategory);
-  const myCat = cats.find((c) => groups.some((g) => g.categoryId === c.id && g.playerIds?.includes(uid)));
+  const myCat = cats.find((c) => (isKnockout(c)
+    ? c.playerIds?.includes(uid)
+    : groups.some((g) => g.categoryId === c.id && g.playerIds?.includes(uid))));
   const current = cats.find((c) => c.id === chosen) ?? myCat ?? cats[0];
   const groupsOf = (c) => groups.filter((g) => g.categoryId === c.id).sort(byName);
-  const playersOf = (c) => new Set(groupsOf(c).flatMap((g) => g.playerIds ?? [])).size;
+  const playersOf = (c) => (isKnockout(c) ? (c.playerIds ?? []).length : new Set(groupsOf(c).flatMap((g) => g.playerIds ?? [])).size);
+  const formats = new Set(cats.map((c) => (isKnockout(c) ? 'ko' : 'groups')));
+  const phase = formats.size === 2 ? 'Grupos y eliminatoria' : formats.has('ko') ? 'Eliminatoria' : 'Fase de grupos';
 
-  const mine = uid ? sortMatches(matches.filter((m) => m.player1Id === uid || m.player2Id === uid), uid) : [];
+  // Los «pasa directo» del cuadro no son partidos: solo se ven en el cuadro
+  const played = matches.filter((m) => !isBye(m));
+  const mine = uid ? sortMatches(played.filter((m) => m.player1Id === uid || m.player2Id === uid), uid) : [];
   const toConfirm = mine.filter((m) => matchState(m, uid).key === 'todo').length;
-  const confirmed = matches.filter((m) => m.status === 'confirmed')
+  const confirmed = played.filter((m) => m.status === 'confirmed')
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
-  const groupName = (m) => groups.find((g) => g.id === m.groupId)?.name;
+  const groupName = (m) => matchPlace(m, groups);
 
 
   const firstName = (profile?.name ?? '').split(' ')[0];
@@ -80,7 +88,7 @@ export default function Home() {
 
           <h1>{active?.name ?? 'Infinity'}</h1>
           <p className="hm-sub">
-            Fase de grupos{cats.length > 0 && <> · {cats.length === 1 ? 'Categoría' : 'Categorías'} {cats.map((c) => c.name).join(', ')}</>}
+            {phase}{cats.length > 0 && <> · {cats.length === 1 ? 'Categoría' : 'Categorías'} {cats.map((c) => c.name).join(', ')}</>}
           </p>
           {(dates || active?.venue) && (
             <p className="hm-chip">
@@ -135,19 +143,31 @@ export default function Home() {
           <section className="hm-cat" id="categoria" aria-labelledby="cat-title">
             <div className="hm-cat-head">
               <h2 id="cat-title">{catTitle(current)}</h2>
-              <span className="hm-meta">{groupsOf(current).length} {groupsOf(current).length === 1 ? 'grupo' : 'grupos'} · {playersOf(current)} jugadores</span>
+              <span className="hm-meta">
+                {isKnockout(current) ? 'Eliminatoria' : `${groupsOf(current).length} ${groupsOf(current).length === 1 ? 'grupo' : 'grupos'}`} · {playersOf(current)} jugadores
+              </span>
               <BallLine className="hm-cat-ball" />
             </div>
             <div className="hm-groups">
-              {groupsOf(current).length === 0 && <p className="hm-empty">Todavía no hay grupos en esta categoría.</p>}
-              {groupsOf(current).map((g) => (
-                <GroupRow key={g.id} group={g} matches={matches.filter((m) => m.groupId === g.id)} usersById={usersById} uid={uid} />
-              ))}
+              {isKnockout(current) ? (
+                <div className="hm-card">
+                  <Bracket category={current} matches={matches.filter((m) => m.categoryId === current.id)} usersById={usersById} />
+                </div>
+              ) : (
+                <>
+                  {groupsOf(current).length === 0 && <p className="hm-empty">Todavía no hay grupos en esta categoría.</p>}
+                  {groupsOf(current).map((g) => (
+                    <GroupRow key={g.id} group={g} matches={matches.filter((m) => m.groupId === g.id)} usersById={usersById} uid={uid} />
+                  ))}
+                </>
+              )}
             </div>
           </section>
         )}
 
       </main>
+
+      <FooterLogo onPhoto />
 
       {modal === 'login' && (
         <Modal title="Identifícate" description="Para ver tus partidos y apuntar resultados." onClose={() => setModal(null)}>
@@ -174,8 +194,9 @@ export default function Home() {
       {modal === 'how' && (
         <Modal title="Cómo funciona" onClose={() => setModal(null)}>
           <ol className="hm-how">
-            <li><b>Categorías.</b> Cada jugador compite en su categoría, repartida en grupos.</li>
+            <li><b>Categorías.</b> Cada jugador compite en su categoría. Según la categoría, se juega por grupos o por eliminatoria.</li>
             <li><b>Fase de grupos.</b> Todos contra todos dentro del grupo. La clasificación va por puntos: ganar el partido son 3 puntos, perderlo habiendo ganado un set es 1 punto y perderlo sin ganar ningún set son 0. </li>
+            <li><b>Eliminatoria.</b> Cuadro por rondas: quien gana pasa a la siguiente ronda y quien pierde queda eliminado. Si en el cuadro hay huecos, los cabezas de serie pasan directos a la segunda ronda.</li>
             <li><b>Partidos.</b> Al mejor de 3 sets. Si quedáis un set cada uno, según el tiempo que tengáis y lo que prefiráis, jugáis un tercer set o un súper tie-break (a 10 puntos con diferencia de 2).</li>
             <li><b>Resultados.</b> Al terminar, uno de los dos apunta el marcador y el rival lo confirma. Solo cuentan los partidos confirmados.</li>
             <li><b>Si no estáis de acuerdo,</b> el rival puede rechazarlo y el partido queda en discrepancia hasta que lo apuntéis bien o lo corrija la organización.</li>
