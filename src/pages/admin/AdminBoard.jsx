@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   addDoc, arrayRemove, arrayUnion, collection, doc, updateDoc, writeBatch,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useTournament } from '../../context/TournamentContext.jsx';
-import { useCollection, useMatches } from '../../hooks/useFirestore';
+import { useCollection, useMatches, usePeople } from '../../hooks/useFirestore';
 import { deleteWithChildren, newMatch } from '../../lib/data';
 import { confirmResult, formatSets, permissionMessage, sortMatches } from '../../lib/matches';
 import { byCategory, byName, computeStandings, pairKey, roundRobinPairs } from '../../lib/tennis';
@@ -17,6 +17,8 @@ import Match from '../Match.jsx';
 import { CategoryModal, GroupModal, TournamentModal } from './AdminModals.jsx';
 import AdminKnockout from './AdminKnockout.jsx';
 import { isKnockout, matchPlace } from '../../lib/bracket';
+import { isDoubles, participantsOf } from '../../lib/teams';
+import AdminTeams from './AdminTeams.jsx';
 
 const toReview = (m) => m.status === 'reported' || (m.status === 'pending' && m.disputedBy);
 const catTitle = (c) => (/^categor/i.test(c.name) ? c.name : `Categoría ${c.name}`);
@@ -28,23 +30,24 @@ export default function AdminBoard() {
   const { data: categories } = useCollection('categories', [['tournamentId', '==', tid]]);
   const { data: groups } = useCollection('groups', [['tournamentId', '==', tid]]);
   const { data: matches } = useMatches([['tournamentId', '==', tid]]);
-  const { data: users } = useCollection('users');
+  const { users, teams, byId: usersById, loading: loadingPeople } = usePeople();
+  const doubles = isDoubles(active);
   const [catId, setCatId] = useState(null);
   const [modal, setModal] = useState(null);
   const close = () => setModal(null);
 
-  const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
-  // Partidos cuyos dos jugadores ya no existen (dados de baja): se borran
+  // Partidos cuyos dos participantes ya no existen (dados de baja): se borran.
+  // Solo con jugadores y parejas ya cargados: si no, un partido de dobles parecería huérfano.
   const { data: allMatches } = useCollection('matches', [['tournamentId', '==', tid]]);
   useEffect(() => {
-    if (users.length === 0) return;
+    if (loadingPeople || users.length === 0) return;
     const orphans = allMatches.filter((m) => !usersById[m.player1Id] && !usersById[m.player2Id]);
     if (orphans.length === 0) return;
     const batch = writeBatch(db);
     orphans.forEach((m) => batch.delete(doc(db, 'matches', m.id)));
     batch.commit().catch((e) => console.error(e));
-  }, [allMatches, users, usersById]);
+  }, [allMatches, users, usersById, loadingPeople]);
   const name = (id) => usersById[id]?.name ?? 'Jugador eliminado';
   const cats = [...categories].sort(byCategory);
   const cat = cats.find((c) => c.id === catId) ?? cats[0];
@@ -56,7 +59,10 @@ export default function AdminBoard() {
     ...groups.flatMap((g) => g.playerIds ?? []),
     ...categories.filter(isKnockout).flatMap((c) => c.playerIds ?? []),
   ]);
-  const loose = users.filter((u) => u.role !== 'admin' && !placed.has(u.id)).sort(byName);
+  // En dobles, «sin colocar» son los jugadores sin pareja en ninguna categoría del torneo
+  const inTeams = new Set(teams.filter((t) => t.tournamentId === tid).flatMap((t) => t.memberIds ?? []));
+  const loose = users.filter((u) => u.role !== 'admin' && !(doubles ? inTeams : placed).has(u.id)).sort(byName);
+  const candidatesOf = (c) => participantsOf({ doubles, categoryId: c?.id, users, teams, byId: usersById });
   const groupLabel = (g) => `${categories.find((c) => c.id === g.categoryId)?.name ?? ''} · ${g.name}`;
   const matchLabel = (m) => `${categories.find((c) => c.id === m.categoryId)?.name ?? ''} · ${matchPlace(m, groups) ?? ''}`;
 
@@ -72,8 +78,8 @@ export default function AdminBoard() {
   }
 
   async function removeCategory(c) {
-    if (!window.confirm(`Se eliminará «${c.name}» con sus grupos y partidos. ¿Continuar?`)) return;
-    await deleteWithChildren('categories', c.id, 'categoryId', ['groups', 'matches']);
+    if (!window.confirm(`Se eliminará «${c.name}» con sus grupos, parejas y partidos. ¿Continuar?`)) return;
+    await deleteWithChildren('categories', c.id, 'categoryId', ['groups', 'matches', 'teams']);
     setCatId(null);
   }
   const playersIn = (c) => (isKnockout(c)
@@ -95,13 +101,15 @@ export default function AdminBoard() {
           )}
           {loose.length > 0 && (
             <button type="button" className="hm-alert lav" onClick={() => setModal({ kind: 'loose' })}>
-              <b>{loose.length}</b> {loose.length === 1 ? 'jugador sin grupo' : 'jugadores sin grupo'}
-              <span>Colocar</span><ChevronRight aria-hidden="true" />
+              <b>{loose.length}</b> {doubles
+                ? (loose.length === 1 ? 'jugador sin pareja' : 'jugadores sin pareja')
+                : (loose.length === 1 ? 'jugador sin grupo' : 'jugadores sin grupo')}
+              <span>{doubles ? 'Ver' : 'Colocar'}</span><ChevronRight aria-hidden="true" />
             </button>
           )}
         </div>
       ) : (
-        <p className="adm2-ok"><CircleCheck aria-hidden="true" /> Todo al día: no hay resultados por revisar ni jugadores sin grupo.</p>
+        <p className="adm2-ok"><CircleCheck aria-hidden="true" /> Todo al día: no hay resultados por revisar ni jugadores sin {doubles ? 'pareja' : 'grupo'}.</p>
       )}
 
       {/* Pestañas de categoría */}
@@ -133,20 +141,26 @@ export default function AdminBoard() {
           <div className="hm-cat-head">
             <h2 id="adm-cat-title">{catTitle(cat)}</h2>
             <span className="hm-meta">
-              {ko ? 'Eliminatoria' : `${catGroups.length} ${catGroups.length === 1 ? 'grupo' : 'grupos'}`} · {playersIn(cat)} jugadores
+              {ko ? 'Eliminatoria' : `${catGroups.length} ${catGroups.length === 1 ? 'grupo' : 'grupos'}`} · {playersIn(cat)} {doubles ? 'parejas' : 'jugadores'}
             </span>
             {!ko && <button type="button" className="hm-tool adm2-head-btn" onClick={() => setModal({ kind: 'group', categoryId: cat.id })}><Plus aria-hidden="true" /> Nuevo grupo</button>}
           </div>
+          {doubles && (
+            <div className="hm-groups hm-groups-teams">
+              <AdminTeams category={cat} users={users} teams={teams} usersById={usersById}
+                usedIds={new Set(ko ? cat.playerIds ?? [] : catGroups.flatMap((g) => g.playerIds ?? []))} />
+            </div>
+          )}
           {ko ? (
             <div className="hm-groups">
-              <AdminKnockout category={cat} users={users} usersById={usersById}
+              <AdminKnockout category={cat} candidates={candidatesOf(cat)} doubles={doubles} usersById={usersById}
                 matches={allMatches.filter((m) => m.categoryId === cat.id)} />
             </div>
           ) : (
           <div className="hm-groups">
             {catGroups.length === 0 && <p className="hm-empty">Esta categoría aún no tiene grupos. Crea el primero con «Nuevo grupo».</p>}
             {catGroups.map((g) => (
-              <AdminGroup key={g.id} group={g} siblings={catGroups} users={users} usersById={usersById}
+              <AdminGroup key={g.id} group={g} siblings={catGroups} candidates={candidatesOf(cat)} doubles={doubles} usersById={usersById}
                 matches={matches.filter((m) => m.groupId === g.id)}
                 onCreate={(pair) => setModal({ kind: 'cell', group: g, pair })}
                 onRename={() => setModal({ kind: 'group', item: g })} />
@@ -164,7 +178,7 @@ export default function AdminBoard() {
         <GroupModal tournamentId={tid} categories={cats} group={modal.item ?? null} defaultCategoryId={modal.categoryId} onClose={close} />
       )}
       {modal?.kind === 'cell' && (
-        <CellModal group={modal.group} pair={modal.pair} name={name}
+        <CellModal group={modal.group} pair={modal.pair} name={name} usersById={usersById}
           match={matches.find((m) => m.id === modal.matchId)} onClose={close}
           onCreated={(id) => setModal({ ...modal, matchId: id })} />
       )}
@@ -174,14 +188,14 @@ export default function AdminBoard() {
           onClose={close} />
       )}
       {modal?.kind === 'loose' && (
-        <LooseModal players={loose} groups={[...groups].sort((a, b) => groupLabel(a).localeCompare(groupLabel(b), 'es'))} groupLabel={groupLabel} onClose={close} />
+        <LooseModal players={loose} doubles={doubles} groups={[...groups].sort((a, b) => groupLabel(a).localeCompare(groupLabel(b), 'es'))} groupLabel={groupLabel} onClose={close} />
       )}
     </>
   );
 }
 
 /** Un grupo: clasificación y jugadores a la izquierda, partidos a la derecha (como en la portada). */
-function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRename }) {
+function AdminGroup({ group, siblings, candidates, doubles, usersById, matches, onCreate, onRename }) {
   const [adding, setAdding] = useState('');
   const ids = group.playerIds ?? [];
   const rows = computeStandings(ids, matches);
@@ -190,7 +204,7 @@ function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRe
   const byPair = new Set(matches.map((m) => pairKey(m.player1Id, m.player2Id)));
   const missing = roundRobinPairs(ids).filter(([a, b]) => !byPair.has(pairKey(a, b)));
   const taken = new Set(siblings.flatMap((g) => g.playerIds ?? []));
-  const available = users.filter((u) => u.role !== 'admin' && !taken.has(u.id)).sort(byName);
+  const available = candidates.filter((u) => !taken.has(u.id)).sort(byName);
 
   async function add(id) {
     setAdding('');
@@ -204,7 +218,7 @@ function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRe
   async function createMissing() {
     if (!window.confirm(`Se crearán los ${missing.length} partidos que faltan. ¿Continuar?`)) return;
     const batch = writeBatch(db);
-    missing.forEach(([a, b]) => batch.set(doc(collection(db, 'matches')), newMatch(group, a, b)));
+    missing.forEach(([a, b]) => batch.set(doc(collection(db, 'matches')), newMatch(group, a, b, usersById)));
     await batch.commit();
   }
   async function remove() {
@@ -222,7 +236,7 @@ function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRe
             <button type="button" className="icon-btn danger" onClick={remove} aria-label={`Eliminar ${group.name}`} title="Eliminar grupo"><Trash2 /></button>
           </span>
         </h3>
-        {rows.length === 0 ? <p className="hm-empty">Añade jugadores a este grupo.</p> : (
+        {rows.length === 0 ? <p className="hm-empty">Añade {doubles ? 'parejas' : 'jugadores'} a este grupo.</p> : (
           <div className="hm-table-wrap">
             <table className="hm-table">
               <thead>
@@ -246,8 +260,8 @@ function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRe
           </div>
         )}
         <div className="adm2-add">
-          <Select label={`Añadir jugador a ${group.name}`} value={adding} onChange={add} size="sm"
-            placeholder={available.length ? '+ Añadir jugador/a…' : 'No queda nadie libre en esta categoría'} disabled={!available.length}
+          <Select label={`Añadir ${doubles ? 'pareja' : 'jugador'} a ${group.name}`} value={adding} onChange={add} size="sm"
+            placeholder={available.length ? (doubles ? '+ Añadir pareja…' : '+ Añadir jugador/a…') : (doubles ? 'No queda ninguna pareja libre' : 'No queda nadie libre en esta categoría')} disabled={!available.length}
             options={available.map((u) => ({ value: u.id, label: u.name }))} />
         </div>
       </section>
@@ -276,12 +290,12 @@ function AdminGroup({ group, siblings, users, usersById, matches, onCreate, onRe
 }
 
 /** Al pulsar una casilla: crear el partido o ver/apuntar el resultado. */
-function CellModal({ group, pair, match, name, onClose, onCreated }) {
+function CellModal({ group, pair, match, name, usersById, onClose, onCreated }) {
   const title = `${name(pair[0])} – ${name(pair[1])}`;
 
   async function create(e) {
     e.preventDefault();
-    const ref = await addDoc(collection(db, 'matches'), newMatch(group, pair[0], pair[1]));
+    const ref = await addDoc(collection(db, 'matches'), newMatch(group, pair[0], pair[1], usersById));
     onCreated(ref.id);
   }
 
@@ -333,9 +347,19 @@ function ReviewModal({ list, name, groupLabel, onOpen, onClose }) {
   );
 }
 
-function LooseModal({ players, groups, groupLabel, onClose }) {
+function LooseModal({ players, doubles, groups, groupLabel, onClose }) {
   const categoryName = (g) => groupLabel(g).split(' · ')[0];
   const [choice, setChoice] = useState({});
+  if (doubles) {
+    return (
+      <Modal title="Jugadores sin pareja" description="Fórmales pareja en la categoría que les toque (tarjeta «Parejas»)." onClose={onClose}>
+        {players.length === 0 && <p className="serif modal-lead">Todos tienen pareja.</p>}
+        <ul className="plain-list">
+          {players.map((p) => <li key={p.id}><span>{p.name}</span></li>)}
+        </ul>
+      </Modal>
+    );
+  }
   async function place(p) {
     const gid = choice[p.id];
     if (!gid) return;

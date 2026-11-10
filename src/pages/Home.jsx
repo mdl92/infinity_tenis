@@ -1,12 +1,12 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarCheck, CalendarDays, ChevronRight, Info, LogOut, MapPin, Settings, Trophy, User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { TournamentSelect, useTournament } from '../context/TournamentContext.jsx';
-import { useCollection, useMatches } from '../hooks/useFirestore';
-import { matchState, sortMatches } from '../lib/matches';
+import { useCollection, useMatches, usePeople } from '../hooks/useFirestore';
+import { isParticipant, matchState, sortMatches } from '../lib/matches';
 import { byCategory, byName, computeStandings } from '../lib/tennis';
 import { Avatar, clubPhoto, FooterLogo, Modal } from '../components/ui.jsx';
 import LoginForm from '../components/LoginBanner.jsx';
@@ -14,6 +14,7 @@ import MatchRows from '../components/MatchRows.jsx';
 import FloatingDock from '../components/FloatingDock.jsx';
 import Bracket from '../components/Bracket.jsx';
 import { isBye, isKnockout, matchPlace } from '../lib/bracket';
+import { isDoubles, isMe } from '../lib/teams';
 
 const dayFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
 const day = (iso) => {
@@ -41,16 +42,15 @@ export default function Home() {
   const { data: categories } = useCollection('categories', [['tournamentId', '==', tid]]);
   const { data: groups } = useCollection('groups', [['tournamentId', '==', tid]]);
   const { data: matches } = useMatches([['tournamentId', '==', tid]]);
-  const { data: users } = useCollection('users');
+  const { byId: usersById } = usePeople();
   const [chosen, setChosen] = useState(null);
   const [modal, setModal] = useState(null); // login | mine | results | how
   const accountRef = useRef(null);
 
-  const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const cats = [...categories].sort(byCategory);
   const myCat = cats.find((c) => (isKnockout(c)
-    ? c.playerIds?.includes(uid)
-    : groups.some((g) => g.categoryId === c.id && g.playerIds?.includes(uid))));
+    ? c.playerIds?.some((id) => isMe(usersById, id, uid))
+    : groups.some((g) => g.categoryId === c.id && g.playerIds?.some((id) => isMe(usersById, id, uid)))));
   const current = cats.find((c) => c.id === chosen) ?? myCat ?? cats[0];
   const groupsOf = (c) => groups.filter((g) => g.categoryId === c.id).sort(byName);
   const playersOf = (c) => (isKnockout(c) ? (c.playerIds ?? []).length : new Set(groupsOf(c).flatMap((g) => g.playerIds ?? [])).size);
@@ -59,7 +59,7 @@ export default function Home() {
 
   // Los «pasa directo» del cuadro no son partidos: solo se ven en el cuadro
   const played = matches.filter((m) => !isBye(m));
-  const mine = uid ? sortMatches(played.filter((m) => m.player1Id === uid || m.player2Id === uid), uid) : [];
+  const mine = uid ? sortMatches(played.filter((m) => isParticipant(m, uid)), uid) : [];
   const toConfirm = mine.filter((m) => matchState(m, uid).key === 'todo').length;
   const confirmed = played.filter((m) => m.status === 'confirmed')
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
@@ -88,7 +88,7 @@ export default function Home() {
 
           <h1>{active?.name ?? 'Infinity'}</h1>
           <p className="hm-sub">
-            {phase}{cats.length > 0 && <> · {cats.length === 1 ? 'Categoría' : 'Categorías'} {cats.map((c) => c.name).join(', ')}</>}
+            {isDoubles(active) ? 'Dobles · ' : ''}{phase}{cats.length > 0 && <> · {cats.length === 1 ? 'Categoría' : 'Categorías'} {cats.map((c) => c.name).join(', ')}</>}
           </p>
           {(dates || active?.venue) && (
             <p className="hm-chip">
@@ -194,6 +194,7 @@ export default function Home() {
       {modal === 'how' && (
         <Modal title="Cómo funciona" onClose={() => setModal(null)}>
           <ol className="hm-how">
+            {isDoubles(active) && <li><b>Dobles.</b> Se juega por parejas fijas: cada pareja compite junta en su categoría. Cualquiera de los dos puede apuntar el resultado y cualquiera de la pareja rival lo confirma.</li>}
             <li><b>Categorías.</b> Cada jugador compite en su categoría. Según la categoría, se juega por grupos o por eliminatoria.</li>
             <li><b>Fase de grupos.</b> Todos contra todos dentro del grupo. La clasificación va por puntos: ganar el partido son 3 puntos, perderlo habiendo ganado un set es 1 punto y perderlo sin ganar ningún set son 0. </li>
             <li><b>Eliminatoria.</b> Cuadro por rondas: quien gana pasa a la siguiente ronda y quien pierde queda eliminado. Si en el cuadro hay huecos, los cabezas de serie pasan directos a la segunda ronda.</li>
@@ -226,9 +227,9 @@ function GroupRow({ group, matches, usersById, uid }) {
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={r.id} className={r.id === uid ? 'me' : undefined}>
+                  <tr key={r.id} className={isMe(usersById, r.id, uid) ? 'me' : undefined}>
                     <td className="c"><span className={`hm-pos p${i + 1}`}>{i + 1}</span></td>
-                    <td><span className="hm-person"><Avatar name={name(r.id)} me={r.id === uid} size="sm" /><span>{name(r.id)}</span></span></td>
+                    <td><span className="hm-person"><Avatar name={name(r.id)} me={isMe(usersById, r.id, uid)} size="sm" /><span>{name(r.id)}</span></span></td>
                     <td className="c">{r.pj}</td>
                     <td className="c">{r.pg}</td>
                     <td className="c">{r.pp}</td>

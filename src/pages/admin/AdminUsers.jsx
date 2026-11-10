@@ -38,10 +38,13 @@ export default function AdminUsers() {
   const { active } = useTournament();
   const { data: groups } = useCollection('groups', [['tournamentId', '==', active?.id]]);
   const { data: categories } = useCollection('categories', [['tournamentId', '==', active?.id]]);
+  const { data: teams } = useCollection('teams', [['tournamentId', '==', active?.id]]);
+  // Dónde juega: directamente o, en dobles, con su pareja
+  const idsOf = (id) => [id, ...teams.filter((t) => t.memberIds?.includes(id)).map((t) => t.id)];
   const groupsOf = (id) => [
-    ...groups.filter((g) => g.playerIds?.includes(id))
+    ...groups.filter((g) => g.playerIds?.some((x) => idsOf(id).includes(x)))
       .map((g) => `${categories.find((c) => c.id === g.categoryId)?.name ?? ''} · ${g.name}`),
-    ...categories.filter((c) => isKnockout(c) && c.playerIds?.includes(id)).map((c) => `${c.name} · Eliminatoria`),
+    ...categories.filter((c) => isKnockout(c) && c.playerIds?.some((x) => idsOf(id).includes(x))).map((c) => `${c.name} · Eliminatoria`),
   ];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -226,6 +229,7 @@ function UserModal({ users, editing, isSelf, onClose, onDone }) {
     const what = [
       moved.groups && `${moved.groups} ${moved.groups === 1 ? 'grupo' : 'grupos'}`,
       moved.knockouts && `${moved.knockouts} ${moved.knockouts === 1 ? 'eliminatoria' : 'eliminatorias'}`,
+      moved.teams && `${moved.teams} ${moved.teams === 1 ? 'pareja' : 'parejas'}`,
       moved.matches && `${moved.matches} ${moved.matches === 1 ? 'partido' : 'partidos'}`,
     ].filter(Boolean).join(', ');
     return `${name} actualizado. Ahora entra como «${firstName} ${lastName}» con la contraseña «${password}»`

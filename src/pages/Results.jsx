@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTournament } from '../context/TournamentContext.jsx';
-import { useCollection, useMatches } from '../hooks/useFirestore';
+import { useCollection, useMatches, usePeople } from '../hooks/useFirestore';
 import { byName } from '../lib/tennis';
 import { EmptyState, PageHead } from '../components/ui.jsx';
 import MatchList from '../components/MatchList.jsx';
@@ -15,10 +15,9 @@ export default function Results() {
   const { data: matches, loading } = useMatches([['tournamentId', '==', tid]]);
   const { data: categories } = useCollection('categories', [['tournamentId', '==', tid]]);
   const { data: groups } = useCollection('groups', [['tournamentId', '==', tid]]);
-  const { data: users } = useCollection('users');
+  const { byId: usersById } = usePeople();
   const [cat, setCat] = useState('');
 
-  const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const catsById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories]);
 
   const shown = matches

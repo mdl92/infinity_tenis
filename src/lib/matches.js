@@ -3,8 +3,10 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { isSuper, winnerOf } from './tennis';
 import { advance, checkWinnerChange, isKoMatch } from './bracket';
+import { sideOfUser } from './teams';
 
-export const isParticipant = (m, uid) => Boolean(uid) && (uid === m.player1Id || uid === m.player2Id);
+/** ¿Juega `uid` este partido? (en dobles, si está en cualquiera de las dos parejas) */
+export const isParticipant = (m, uid) => sideOfUser(m, uid) !== null;
 
 /**
  * Estado del partido visto por una persona concreta (uid puede ser null: visitante).
@@ -15,8 +17,11 @@ export const isParticipant = (m, uid) => Boolean(uid) && (uid === m.player1Id ||
 export function matchState(m, uid) {
   if (m.status === 'confirmed') return { key: 'confirmed', label: 'Confirmado', tone: 'green' };
   if (m.status === 'reported') {
-    if (uid && isParticipant(m, uid) && m.reportedBy !== uid) return { key: 'todo', label: 'Sin confirmar', tone: 'lavender' };
-    if (uid && m.reportedBy === uid) return { key: 'waiting', label: 'Sin confirmar', tone: 'lavender' };
+    // En dobles, «el rival» es la otra pareja: confirma cualquiera de los dos
+    const mySide = sideOfUser(m, uid);
+    const reporterSide = sideOfUser(m, m.reportedBy);
+    if (mySide && mySide !== reporterSide) return { key: 'todo', label: 'Sin confirmar', tone: 'lavender' };
+    if (mySide && mySide === reporterSide) return { key: 'waiting', label: 'Sin confirmar', tone: 'lavender' };
     return { key: 'review', label: 'Sin confirmar', tone: 'lavender' };
   }
   if (m.disputedBy) return { key: 'dispute', label: 'Discrepancia', tone: 'coral' };

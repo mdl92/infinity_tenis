@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { formatSets, matchState, sideOf } from '../lib/matches';
 import { isSuper } from '../lib/tennis';
+import { isMe } from '../lib/teams';
 import Match from '../pages/Match.jsx';
 
 /** Lista compacta de partidos; cada uno se despliega para ver o apuntar el resultado. */
@@ -16,7 +17,7 @@ export default function MatchRows({ matches, usersById, uid, sub, children }) {
         const sets = m.sets ?? [];
         const open = openId === m.id;
         const line = (pid) => (
-          <span className={`mrow-p ${sets.length && m.winnerId === pid ? 'win' : ''} ${pid === uid ? 'me' : ''}`}>
+          <span className={`mrow-p ${sets.length && m.winnerId === pid ? 'win' : ''} ${isMe(usersById, pid, uid) ? 'me' : ''}`}>
             <i aria-hidden="true" />{name(pid)}
           </span>
         );

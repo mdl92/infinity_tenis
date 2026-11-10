@@ -3,24 +3,25 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, LayoutGrid, Layers } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTournament } from '../context/TournamentContext.jsx';
-import { useCollection } from '../hooks/useFirestore';
+import { useCollection, useMyMatches, usePeople } from '../hooks/useFirestore';
 import { matchState, sortMatches } from '../lib/matches';
 import { computeStandings } from '../lib/tennis';
 import { CourtSvg, EmptyState } from '../components/ui.jsx';
 import MatchList from '../components/MatchList.jsx';
 import { isBye, matchPlace } from '../lib/bracket';
+import { isMe } from '../lib/teams';
 
 export default function Dashboard() {
   const { profile, user, isAdmin } = useAuth();
   const { active } = useTournament();
   const uid = user.uid;
-  const { data: myGroups } = useCollection('groups', [['playerIds', 'array-contains', uid]]);
+  const { data: allGroups } = useCollection('groups');
   const { data: categories } = useCollection('categories');
-  const { data: users } = useCollection('users');
-  const { data: asP1 } = useCollection('matches', [['player1Id', '==', uid]]);
-  const { data: asP2 } = useCollection('matches', [['player2Id', '==', uid]]);
+  const { byId: usersById } = usePeople();
+  const { data: myMatches } = useMyMatches(uid);
+  // Grupos donde juega (él o, en dobles, su pareja)
+  const myGroups = allGroups.filter((g) => g.playerIds?.some((id) => isMe(usersById, id, uid)));
 
-  const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const catsById = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories]);
 
   // Grupo del torneo activo (si juega en varios torneos, el del que se está viendo)
@@ -30,9 +31,9 @@ export default function Dashboard() {
   const myCategories = [...new Set(inTournament.map((g) => catsById[g.categoryId]?.name).filter(Boolean))];
   const { data: groupMatches } = useCollection('matches', [['groupId', '==', group?.id]]);
   const rows = group ? computeStandings(group.playerIds ?? [], groupMatches) : [];
-  const pos = rows.findIndex((r) => r.id === uid) + 1;
+  const pos = rows.findIndex((r) => isMe(usersById, r.id, uid)) + 1;
 
-  const mine = sortMatches([...asP1, ...asP2].filter((m) => !isBye(m)), uid);
+  const mine = sortMatches(myMatches.filter((m) => !isBye(m)), uid);
   const upcoming = mine.filter((m) => m.status !== 'confirmed');
   const toConfirm = upcoming.filter((m) => matchState(m, uid).key === 'todo');
   const firstName = (profile?.name ?? '').split(' ')[0];

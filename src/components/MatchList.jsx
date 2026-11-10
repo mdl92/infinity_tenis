@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { matchState, sideOf } from '../lib/matches';
 import { isSuper } from '../lib/tennis';
+import { isMe } from '../lib/teams';
 import { Avatar } from './ui.jsx';
 import Match from '../pages/Match.jsx';
 
@@ -48,8 +49,8 @@ export default function MatchList({ matches, usersById, uid, extra, expandable =
           <>
             <span className="sr-flag" aria-hidden="true" />
             <div className="sr-board">
-              <Line name={p1} me={m.player1Id === uid} side="a" match={m} />
-              <Line name={p2} me={m.player2Id === uid} side="b" match={m} />
+              <Line name={p1} me={isMe(usersById, m.player1Id, uid)} side="a" match={m} />
+              <Line name={p2} me={isMe(usersById, m.player2Id, uid)} side="b" match={m} />
             </div>
             <div className="sr-side">
               <span className={`tag tag-${state.tone}`}>{state.label}</span>

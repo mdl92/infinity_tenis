@@ -9,6 +9,7 @@
 // Las reglas de Firestore comprueban que los dos jugadores del partido nuevo son de verdad los ganadores.
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
+import { teamFields } from './teams';
 
 export const FORMATS = { groups: 'groups', knockout: 'knockout' };
 export const isKnockout = (category) => category?.format === FORMATS.knockout;
@@ -72,8 +73,8 @@ const emptyResult = () => ({
   status: 'pending', sets: [], winnerId: null, reportedBy: null, confirmedBy: null, createdAt: serverTimestamp(),
 });
 
-/** Partidos de primera ronda a partir de los jugadores ordenados por cabeza de serie. */
-export function firstRound(category, seededIds) {
+/** Partidos de primera ronda a partir de los participantes ordenados por cabeza de serie. `byId`: directorio (dobles). */
+export function firstRound(category, seededIds, byId = {}) {
   const size = drawSizeFor(seededIds.length);
   const rounds = Math.log2(size);
   const order = seedOrder(size);
@@ -81,16 +82,19 @@ export function firstRound(category, seededIds) {
   for (let slot = 0; slot < size / 2; slot++) {
     const p1 = seededIds[order[slot * 2] - 1] ?? null;
     const p2 = seededIds[order[slot * 2 + 1] - 1] ?? null;
-    const data = { ...base(category, 0, slot, rounds), ...emptyResult(), player1Id: p1, player2Id: p2 };
-    if (!p1 || !p2) Object.assign(data, { player1Id: p1 ?? p2, player2Id: null, bye: true, status: 'confirmed', winnerId: p1 ?? p2 });
+    const data = { ...base(category, 0, slot, rounds), ...emptyResult(), player1Id: p1, player2Id: p2, ...teamFields(p1, p2, byId) };
+    if (!p1 || !p2) {
+      const solo = p1 ?? p2;
+      Object.assign(data, { player1Id: solo, player2Id: null, bye: true, status: 'confirmed', winnerId: solo, ...teamFields(solo, null, byId) });
+    }
     out.push({ id: koId(category.id, 0, slot), data });
   }
   return { size, rounds, matches: out };
 }
 
 /** Crea el cuadro (primera ronda) y hace pasar de ronda a quienes pasan directo. */
-export async function createDraw(category, seededIds) {
-  const { size, rounds, matches } = firstRound(category, seededIds);
+export async function createDraw(category, seededIds, byId = {}) {
+  const { size, rounds, matches } = firstRound(category, seededIds, byId);
   const batch = writeBatch(db);
   matches.forEach((m) => batch.set(doc(db, 'matches', m.id), m.data));
   batch.update(doc(db, 'categories', category.id), { playerIds: seededIds, drawSize: size, rounds, drawn: true });
@@ -106,6 +110,15 @@ export function nextOf(m) {
   return { id: koId(m.categoryId, m.round + 1, Math.floor(m.slot / 2)), side: m.slot % 2 === 0 ? 'player1Id' : 'player2Id' };
 }
 
+/** En dobles, la pareja (personas) que ganó el partido `x`; en individuales, null. */
+const winnerTeam = (x) => (x.team1Ids || x.team2Ids ? (x.winnerId === x.player1Id ? x.team1Ids : x.team2Ids) ?? null : null);
+
+/** Campos de dobles del partido siguiente a partir de las dos parejas que llegan (vacío en individuales). */
+function nextTeams(team1Ids, team2Ids) {
+  if (!team1Ids && !team2Ids) return {};
+  return { team1Ids, team2Ids, memberIds: [...(team1Ids ?? []), ...(team2Ids ?? [])] };
+}
+
 /**
  * Tras confirmarse `m` (con su winnerId), crea el partido de la ronda siguiente si el otro ya está decidido.
  * Si ya existe y aún no tiene resultado, un admin puede corregir el jugador (p. ej. si cambió el ganador).
@@ -117,13 +130,23 @@ export async function advance(m, { asAdmin = false } = {}) {
   const nextSnap = await getDoc(nextRef);
   if (nextSnap.exists()) {
     const n = nextSnap.data();
-    if (asAdmin && n[next.side] !== m.winnerId && !(n.sets?.length)) await updateDoc(nextRef, { [next.side]: m.winnerId });
+    if (asAdmin && n[next.side] !== m.winnerId && !(n.sets?.length)) {
+      const changes = { [next.side]: m.winnerId };
+      const team = winnerTeam(m);
+      if (team) {
+        const t1 = next.side === 'player1Id' ? team : n.team1Ids ?? null;
+        const t2 = next.side === 'player2Id' ? team : n.team2Ids ?? null;
+        Object.assign(changes, nextTeams(t1, t2));
+      }
+      await updateDoc(nextRef, changes);
+    }
     return;
   }
   const sibling = await getDoc(doc(db, 'matches', koId(m.categoryId, m.round, m.slot ^ 1)));
   if (!sibling.exists() || sibling.data().status !== 'confirmed') return;
   const s = sibling.data();
   const [p1, p2] = m.slot % 2 === 0 ? [m.winnerId, s.winnerId] : [s.winnerId, m.winnerId];
+  const [t1, t2] = m.slot % 2 === 0 ? [winnerTeam(m), winnerTeam(s)] : [winnerTeam(s), winnerTeam(m)];
   const round = m.round + 1;
   const slot = Math.floor(m.slot / 2);
   await setDoc(nextRef, {
@@ -131,6 +154,7 @@ export async function advance(m, { asAdmin = false } = {}) {
     ...emptyResult(),
     player1Id: p1,
     player2Id: p2,
+    ...nextTeams(t1, t2),
   });
 }
 

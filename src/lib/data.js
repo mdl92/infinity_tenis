@@ -2,9 +2,12 @@ import {
   collection, doc, getDocs, query, serverTimestamp, where, writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { teamFields } from './teams';
 
-export function newMatch(group, player1Id, player2Id) {
+/** Partido nuevo de un grupo. `byId` (directorio de participantes) añade quién juega en dobles. */
+export function newMatch(group, player1Id, player2Id, byId = {}) {
   return {
+    ...teamFields(player1Id, player2Id, byId),
     tournamentId: group.tournamentId,
     categoryId: group.categoryId,
     groupId: group.id,

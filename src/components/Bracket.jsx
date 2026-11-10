@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { advance, buildBracket, championOf, koId } from '../lib/bracket';
 import { formatSets, matchState, sideOf } from '../lib/matches';
 import { isSuper } from '../lib/tennis';
+import { isMe } from '../lib/teams';
 import { Modal } from './ui.jsx';
 import Match from '../pages/Match.jsx';
 
@@ -23,13 +24,13 @@ function Games({ match, side }) {
   );
 }
 
-function Slot({ slot, name, uid, onOpen }) {
+function Slot({ slot, name, uid, mine, onOpen }) {
   const { match, p1, p2 } = slot;
   const decided = match?.status === 'confirmed' && !match.bye;
   const line = (pid, side) => {
     const win = match?.status === 'confirmed' && match.winnerId === pid && pid;
     return (
-      <span className={`bk-line ${win ? 'win' : ''} ${pid && pid === uid ? 'me' : ''} ${pid ? '' : 'tbd'}`}>
+      <span className={`bk-line ${win ? 'win' : ''} ${mine(pid) ? 'me' : ''} ${pid ? '' : 'tbd'}`}>
         <span className="bk-name">{pid ? name(pid) : (match?.bye ? '—' : 'Por decidir')}</span>
         {decided && <Games match={match} side={side} />}
       </span>
@@ -102,7 +103,7 @@ export default function Bracket({ category, matches, usersById }) {
               <div className="bk-slots">
                 {r.slots.map((s) => (
                   <div key={s.slot} className="bk-cell">
-                    <Slot slot={s} name={name} uid={uid} onOpen={(m) => setOpenId(m.id)} />
+                    <Slot slot={s} name={name} uid={uid} mine={(pid) => isMe(usersById, pid, uid)} onOpen={(m) => setOpenId(m.id)} />
                   </div>
                 ))}
               </div>

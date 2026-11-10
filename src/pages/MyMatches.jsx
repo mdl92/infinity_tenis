@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useCollection } from '../hooks/useFirestore';
+import { useCollection, useMyMatches, usePeople } from '../hooks/useFirestore';
 import { sortMatches } from '../lib/matches';
 import { EmptyState, PageHead } from '../components/ui.jsx';
 import MatchList from '../components/MatchList.jsx';
@@ -8,15 +8,13 @@ import { isBye, matchPlace } from '../lib/bracket';
 
 export default function MyMatches() {
   const { user } = useAuth();
-  const { data: asP1, loading } = useCollection('matches', [['player1Id', '==', user.uid]]);
-  const { data: asP2 } = useCollection('matches', [['player2Id', '==', user.uid]]);
-  const { data: users } = useCollection('users');
+  const { data: myMatches, loading } = useMyMatches(user.uid);
+  const { byId: usersById } = usePeople();
   const { data: groups } = useCollection('groups');
   const [tab, setTab] = useState('open');
 
-  const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
-  const all = sortMatches([...asP1, ...asP2].filter((m) => !isBye(m)), user.uid);
+  const all = sortMatches(myMatches.filter((m) => !isBye(m)), user.uid);
   const open = all.filter((m) => m.status !== 'confirmed');
   const done = all.filter((m) => m.status === 'confirmed');
   const shown = tab === 'open' ? open : done;

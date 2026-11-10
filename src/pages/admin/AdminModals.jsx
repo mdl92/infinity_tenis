@@ -5,11 +5,14 @@ import { deleteWithChildren } from '../../lib/data';
 import { Modal } from '../../components/ui.jsx';
 import Select, { Segmented } from '../../components/Select.jsx';
 import { FORMATS } from '../../lib/bracket';
+import { MODALITIES } from '../../lib/teams';
 
 // Modales de organización: torneo, categoría y grupo.
 
-export function TournamentModal({ tournament, onClose, onCreated }) {
+/** `canChangeModality`: individual/dobles solo se puede cambiar mientras el torneo no tiene categorías. */
+export function TournamentModal({ tournament, canChangeModality = true, onClose, onCreated }) {
   const [name, setName] = useState(tournament?.name ?? '');
+  const [modality, setModality] = useState(tournament?.modality ?? MODALITIES.singles);
   const [startDate, setStartDate] = useState(tournament?.startDate ?? '');
   const [endDate, setEndDate] = useState(tournament?.endDate ?? '');
   const [venue, setVenue] = useState(tournament?.venue ?? '');
@@ -19,7 +22,10 @@ export function TournamentModal({ tournament, onClose, onCreated }) {
     e.preventDefault();
     if (!name.trim()) return;
     setBusy(true);
-    const data = { name: name.trim(), startDate: startDate || null, endDate: endDate || null, venue: venue.trim() || null };
+    const data = {
+      name: name.trim(), startDate: startDate || null, endDate: endDate || null, venue: venue.trim() || null,
+      ...(canChangeModality ? { modality } : {}),
+    };
     if (tournament) {
       await updateDoc(doc(db, 'tournaments', tournament.id), data);
     } else {
@@ -36,6 +42,18 @@ export function TournamentModal({ tournament, onClose, onCreated }) {
           <span>Nombre del torneo</span>
           <input autoFocus placeholder="p. ej. Torneo de Otoño 2026" value={name} onChange={(e) => setName(e.target.value)} required />
         </label>
+        <div className="field">
+          <span>Modalidad</span>
+          <Segmented label="Modalidad" value={modality} onChange={canChangeModality ? setModality : () => {}}
+            options={[{ value: MODALITIES.singles, label: 'Individual' }, { value: MODALITIES.doubles, label: 'Dobles' }]} />
+          <span className="field-hint">
+            {!canChangeModality
+              ? 'No se puede cambiar: el torneo ya tiene categorías.'
+              : modality === MODALITIES.doubles
+                ? 'Se juega por parejas fijas: las formas en cada categoría y compiten juntas en grupos o eliminatoria.'
+                : 'Cada jugador compite por su cuenta.'}
+          </span>
+        </div>
         <div className="form-row">
           <label className="field">
             <span>Empieza (opcional)</span>
@@ -54,7 +72,7 @@ export function TournamentModal({ tournament, onClose, onCreated }) {
           {tournament && (
             <button type="button" className="btn btn-ghost btn-danger" style={{ marginRight: 'auto' }} onClick={async () => {
               if (!window.confirm(`Se eliminará «${tournament.name}» con todas sus categorías, grupos y partidos. ¿Continuar?`)) return;
-              await deleteWithChildren('tournaments', tournament.id, 'tournamentId', ['categories', 'groups', 'matches']);
+              await deleteWithChildren('tournaments', tournament.id, 'tournamentId', ['categories', 'groups', 'matches', 'teams']);
               onClose();
             }}>Eliminar torneo</button>
           )}

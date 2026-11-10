@@ -31,10 +31,29 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---- Parejas de dobles: públicas para leer, solo el admin las forma ----
+    match /teams/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ---- Partidos ----
+    // En dobles, player1Id/player2Id son parejas y el partido guarda quién juega en cada lado:
+    // team1Ids (lado de player1Id), team2Ids y memberIds (los cuatro).
     match /matches/{id} {
+      // Personas del mismo lado que `uid` (en individuales, solo esa persona)
+      function sideOf(d, uid) {
+        return d.get('team1Ids', null) != null && uid in d.team1Ids ? d.team1Ids
+          : d.get('team2Ids', null) != null && uid in d.team2Ids ? d.team2Ids
+          : [uid];
+      }
       function isParticipant() {
-        return request.auth.uid in [resource.data.player1Id, resource.data.player2Id];
+        return request.auth.uid in [resource.data.player1Id, resource.data.player2Id]
+          || request.auth.uid in resource.data.get('memberIds', []);
+      }
+      // Quien confirma o rechaza tiene que ser del otro lado (la otra pareja, en dobles)
+      function isRival() {
+        return !(request.auth.uid in sideOf(resource.data, resource.data.reportedBy));
       }
       function changed() {
         return request.resource.data.diff(resource.data).affectedKeys();
@@ -50,7 +69,7 @@ service cloud.firestore {
       // El contrincante lo confirma (sin poder tocar el marcador)
       function isConfirm() {
         return resource.data.status == 'reported'
-          && resource.data.reportedBy != request.auth.uid
+          && isRival()
           && request.resource.data.status == 'confirmed'
           && request.resource.data.confirmedBy == request.auth.uid
           && changed().hasOnly(['status', 'confirmedBy', 'updatedAt']);
@@ -58,7 +77,7 @@ service cloud.firestore {
       // ...o lo rechaza: vuelve a pendiente y queda constancia de la discrepancia
       function isReject() {
         return resource.data.status == 'reported'
-          && resource.data.reportedBy != request.auth.uid
+          && isRival()
           && request.resource.data.status == 'pending'
           && request.resource.data.disputedBy == request.auth.uid
           && changed().hasOnly(['sets', 'status', 'reportedBy', 'winnerId', 'disputedBy', 'disputedSets', 'updatedAt']);
@@ -67,6 +86,11 @@ service cloud.firestore {
       // Eliminatoria: al confirmarse un partido, cualquiera con sesión puede crear el de la ronda siguiente,
       // pero solo con su ID fijo (ko_<categoría>_<ronda>_<posición>), vacío y con los dos ganadores
       // confirmados de los partidos anteriores (ronda - 1, posiciones 2·pos y 2·pos + 1).
+      // En dobles, las personas de la pareja que ganó el partido `f` (null en individuales)
+      function winnerTeam(f) {
+        return f.get('team1Ids', null) == null && f.get('team2Ids', null) == null ? null
+          : f.winnerId == f.player1Id ? f.get('team1Ids', null) : f.get('team2Ids', null);
+      }
       function koId(cat, round, slot) {
         return 'ko_' + cat + '_' + string(round) + '_' + string(slot);
       }
@@ -76,11 +100,14 @@ service cloud.firestore {
         let f2 = get(/databases/$(database)/documents/matches/$(koId(d.categoryId, d.round - 1, d.slot * 2 + 1))).data;
         return signedIn()
           && d.keys().hasOnly(['tournamentId', 'categoryId', 'groupId', 'round', 'slot', 'rounds', 'player1Id', 'player2Id',
-                               'status', 'sets', 'winnerId', 'reportedBy', 'confirmedBy', 'createdAt'])
+                               'status', 'sets', 'winnerId', 'reportedBy', 'confirmedBy', 'createdAt',
+                               'team1Ids', 'team2Ids', 'memberIds'])
           && d.round is int && d.slot is int && d.round > 0 && d.round < d.rounds
           && matchId == koId(d.categoryId, d.round, d.slot)
           && f1.status == 'confirmed' && f2.status == 'confirmed'
           && d.player1Id == f1.winnerId && d.player2Id == f2.winnerId
+          && d.get('team1Ids', null) == winnerTeam(f1) && d.get('team2Ids', null) == winnerTeam(f2)
+          && (winnerTeam(f1) == null || d.memberIds == winnerTeam(f1).concat(winnerTeam(f2)))
           && d.tournamentId == f1.tournamentId && d.categoryId == f1.categoryId && d.rounds == f1.rounds
           && d.groupId == null && d.status == 'pending' && d.sets.size() == 0
           && d.winnerId == null && d.reportedBy == null && d.confirmedBy == null;

@@ -12,6 +12,7 @@ React (Vite) + Firebase (Auth + Firestore), desplegado en GitHub Pages.
   - Cada persona entra con su **nombre y primer apellido** (sin importar mayúsculas ni tildes) y una **contraseña automática**: inicial del nombre + primer apellido (Laura Martín → `lmartin`).
   - Por dentro, Firebase usa un email interno que nadie ve (`laura-martin@jugadores-infinity.example.com`) y a la contraseña se le añade un sufijo fijo, porque Firebase exige 6 caracteres. Todo está en `src/lib/access.js`.
   - ⚠️ Como la contraseña sale del nombre, cualquiera que conozca el nombre de un jugador puede entrar como él. Es aceptable para un torneo entre conocidos; si no, conviene añadir un cambio de contraseña en el primer acceso.
+- **Individual o dobles (por torneo)**: al crear el torneo se elige *Individual* o *Dobles* (solo se puede cambiar mientras no tenga categorías). En dobles, el admin forma **parejas fijas** en cada categoría (tarjeta *Parejas*: un jugador, una pareja por categoría) y son las parejas las que entran en grupos o en el cuadro; clasificación, puntos y eliminatoria funcionan igual, pero por pareja. **Cualquiera de los dos** apunta el resultado y **cualquiera de la pareja rival** lo confirma o lo rechaza. La lógica está en `src/lib/teams.js`.
 - **Tipo de torneo por categoría**: al crear una categoría se elige *Torneo de grupos* (todos contra todos con clasificación) o *Eliminatoria* (cuadro por rondas). Solo se puede cambiar mientras la categoría está vacía.
 - **Eliminatoria**: el admin añade los jugadores y sortea el cuadro **al azar** o **por cabezas de serie** (en el orden de la lista: el 1.º y el 2.º solo se cruzan en la final). Si el número de jugadores no es potencia de 2, los mejores cabezas de serie *pasan directo* a la segunda ronda. Al confirmarse un partido, el ganador pasa solo a la siguiente ronda; *Rehacer sorteo* borra el cuadro y deja los jugadores. La lógica está en `src/lib/bracket.js`.
 - **Discrepancias**: si el rival rechaza un resultado, el partido vuelve a *Por jugar* y queda marcado (`disputedBy`, `disputedSets`) para que se vea el aviso.
@@ -63,11 +64,12 @@ Se usa `HashRouter` (URLs con `#/`) para que recargar cualquier página funcione
 | Colección     | Campos principales |
 |---------------|--------------------|
 | `users/{uid}` | `name`, `firstName`, `lastName`, `secondLastName`, `username` (nombre + primer apellido, p. ej. `laura-martin`), `authUsername`, `authFirstName`, `authLastName` (con qué se creó la cuenta de acceso), `role` (`admin` \| `player`) |
-| `tournaments` | `name` |
+| `tournaments` | `name`, `modality` (`singles` \| `doubles`), `startDate`, `endDate`, `venue` |
 | `categories`  | `tournamentId`, `name`, `format` (`groups` \| `knockout`) |
 | `categories` (eliminatoria) | además: `format: 'knockout'`, `playerIds[]` (por orden de cabeza de serie), `drawn`, `drawSize`, `rounds` |
+| `teams` (dobles) | `tournamentId`, `categoryId`, `memberIds[2]` |
 | `groups`      | `tournamentId`, `categoryId`, `name`, `playerIds[]` |
-| `matches`     | `tournamentId`, `categoryId`, `groupId`, `player1Id`, `player2Id`, `status` (`pending` \| `reported` \| `confirmed`), `sets[{a,b,ta?,tb?}]` (2 o 3 sets; el tercero es `{a,b,super:true}` si fue súper tie-break), `winnerId`, `reportedBy`, `confirmedBy`, `disputedBy`, `disputedSets`. En la eliminatoria, ID fijo `ko_<categoría>_<ronda>_<posición>` y además `round`, `slot`, `rounds` (y `bye: true` si pasa directo) |
+| `matches`     | `tournamentId`, `categoryId`, `groupId`, `player1Id`, `player2Id`, `status` (`pending` \| `reported` \| `confirmed`), `sets[{a,b,ta?,tb?}]` (2 o 3 sets; el tercero es `{a,b,super:true}` si fue súper tie-break), `winnerId`, `reportedBy`, `confirmedBy`, `disputedBy`, `disputedSets`. En dobles, `player1Id`/`player2Id`/`winnerId` son parejas y además `team1Ids`, `team2Ids` (personas de cada lado) y `memberIds` (las cuatro); `reportedBy`/`confirmedBy`/`disputedBy` siguen siendo personas. En la eliminatoria, ID fijo `ko_<categoría>_<ronda>_<posición>` y además `round`, `slot`, `rounds` (y `bye: true` si pasa directo) |
 
 ## Notas
 

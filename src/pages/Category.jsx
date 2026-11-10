@@ -1,8 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useMemo } from 'react';
-import { useCollection, useDoc, useMatches } from '../hooks/useFirestore';
+import { useCollection, useDoc, useMatches, usePeople } from '../hooks/useFirestore';
 import { isKnockout } from '../lib/bracket';
 import Bracket from '../components/Bracket.jsx';
 import { byName } from '../lib/tennis';
@@ -15,8 +14,7 @@ export default function Category() {
   const { data: category, loading } = useDoc('categories', categoryId);
   const { data: groups, loading: loadingGroups } = useCollection('groups', [['categoryId', '==', categoryId]]);
   const { data: matches } = useMatches([['categoryId', '==', categoryId]]);
-  const { data: users } = useCollection('users');
-  const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
+  const { byId: usersById } = usePeople();
 
   if (loading || loadingGroups) return <p className="loading">Cargando…</p>;
   if (!category) {

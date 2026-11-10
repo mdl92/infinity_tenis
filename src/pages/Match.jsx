@@ -4,7 +4,7 @@ import { deleteDoc, doc } from 'firebase/firestore';
 import { ArrowLeft, CircleCheck, Hourglass, LayoutGrid, Layers, TriangleAlert } from 'lucide-react';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useDoc, useCollection } from '../hooks/useFirestore';
+import { useDoc, usePeople } from '../hooks/useFirestore';
 import {
   confirmResult, formatSets, isParticipant, matchState, permissionMessage, rejectResult, saveResult, sideOf,
 } from '../lib/matches';
@@ -12,6 +12,7 @@ import {
   DECIDERS, cleanSets, deciderOf, formSets, isSuper, needsDecider, needsTiebreak, validateSets,
 } from '../lib/tennis';
 import { isKoMatch, roundName } from '../lib/bracket';
+import { isMe, sideOfUser } from '../lib/teams';
 import { Avatar, CourtSvg, EmptyState } from '../components/ui.jsx';
 import { Segmented } from '../components/Select.jsx';
 
@@ -33,7 +34,7 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
   const { data: match, loading } = useDoc('matches', matchId);
   const { data: group } = useDoc('groups', match?.groupId);
   const { data: category } = useDoc('categories', match?.categoryId);
-  const { data: users } = useCollection('users');
+  const { byId: usersById } = usePeople();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -43,7 +44,7 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
     return <EmptyState title="Partido no encontrado" action={<Link className="btn" to="/categorias">Volver a categorías</Link>} />;
   }
 
-  const name = (id) => users.find((u) => u.id === id)?.name ?? 'Jugador eliminado';
+  const name = (id) => usersById[id]?.name ?? 'Jugador eliminado';
   const uid = user?.uid;
   const state = matchState(match, uid);
   const mine = isParticipant(match, uid);
@@ -165,7 +166,7 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
           <div className="faceoff">
             {[match.player1Id, match.player2Id].map((pid, i) => (
               <div key={pid} className="faceoff-player" style={{ gridColumn: i === 0 ? 1 : 3 }}>
-                <Avatar name={name(pid)} me={pid === uid} size="lg" />
+                <Avatar name={name(pid)} me={isMe(usersById, pid, uid)} size="lg" />
                 <span className="faceoff-name">{name(pid)}</span>
                 {decided && match.winnerId === pid && <span className="winner-mark">Ganador/a</span>}
               </div>
@@ -187,8 +188,9 @@ export default function Match({ matchId: idProp, compact = false, onDeleted }) {
 
 /** Aviso del estado del partido, distinto para cada caso. */
 function StatusLine({ state, match, name, uid }) {
-  const rival = match.player1Id === uid ? name(match.player2Id) : name(match.player1Id);
-  const confirmer = match.reportedBy === match.player1Id ? name(match.player2Id) : name(match.player1Id);
+  // En dobles, el rival es la otra pareja y quien envía el resultado es una persona de una de ellas
+  const rival = sideOfUser(match, uid) === 'a' ? name(match.player2Id) : name(match.player1Id);
+  const confirmer = sideOfUser(match, match.reportedBy) === 'a' ? name(match.player2Id) : name(match.player1Id);
   switch (state.key) {
     case 'todo':
       return (

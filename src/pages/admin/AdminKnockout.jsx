@@ -13,13 +13,14 @@ import Select, { Segmented } from '../../components/Select.jsx';
 const MODES = { random: 'random', seeded: 'seeded' };
 
 /** Categoría por eliminatoria: antes del sorteo, elegir jugadores; después, el cuadro. */
-export default function AdminKnockout({ category, users, usersById, matches }) {
+export default function AdminKnockout({ category, candidates, doubles, usersById, matches }) {
   const [mode, setMode] = useState(MODES.random);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const ids = category.playerIds ?? [];
   const name = (id) => usersById[id]?.name ?? 'Jugador eliminado';
-  const available = users.filter((u) => u.role !== 'admin' && !ids.includes(u.id)).sort(byName);
+  const available = candidates.filter((u) => !ids.includes(u.id)).sort(byName);
+  const unit = doubles ? 'parejas' : 'jugadores';
   const ref = doc(db, 'categories', category.id);
 
   const size = drawSizeFor(ids.length);
@@ -33,7 +34,9 @@ export default function AdminKnockout({ category, users, usersById, matches }) {
       await fn();
     } catch (e) {
       console.error(e);
-      setError('No se ha podido guardar. Revisa tu conexión e inténtalo de nuevo.');
+      setError(e?.code === 'permission-denied'
+        ? 'Firebase no ha dado permiso para guardar. Comprueba que las reglas de firestore.rules están publicadas en Firestore › Reglas.'
+        : 'No se ha podido guardar. Revisa tu conexión e inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -50,8 +53,8 @@ export default function AdminKnockout({ category, users, usersById, matches }) {
   function draw() {
     const seeded = mode === MODES.random ? shuffle(ids) : ids;
     const how = mode === MODES.random ? 'al azar' : 'por el orden de la lista (el 1.º es el primer cabeza de serie)';
-    if (!window.confirm(`Se sorteará un cuadro de ${size} con ${ids.length} jugadores, ${how}.${byes ? ` ${byes} pasarán directos a la segunda ronda.` : ''} ¿Continuar?`)) return;
-    run(() => createDraw(category, seeded));
+    if (!window.confirm(`Se sorteará un cuadro de ${size} con ${ids.length} ${unit}, ${how}.${byes ? ` ${byes} pasarán directos a la segunda ronda.` : ''} ¿Continuar?`)) return;
+    run(() => createDraw(category, seeded, usersById));
   }
 
   function redo() {
@@ -72,7 +75,7 @@ export default function AdminKnockout({ category, users, usersById, matches }) {
     return (
       <div className="hm-card ko-admin">
         <div className="ko-admin-head">
-          <h3>Cuadro <span className="hm-meta">{ids.length} jugadores · {roundName(0, category.rounds)} · {played} {played === 1 ? 'jugado' : 'jugados'}</span></h3>
+          <h3>Cuadro <span className="hm-meta">{ids.length} {unit} · {roundName(0, category.rounds)} · {played} {played === 1 ? 'jugado' : 'jugados'}</span></h3>
           <button type="button" className="hm-tool danger" onClick={redo} disabled={busy}><RotateCcw aria-hidden="true" /> Rehacer sorteo</button>
         </div>
         <Bracket category={category} matches={matches} usersById={usersById} />
@@ -84,9 +87,9 @@ export default function AdminKnockout({ category, users, usersById, matches }) {
 
   return (
     <div className="hm-card ko-admin">
-      <h3>Jugadores <span className="hm-meta">{ids.length} {ids.length === 1 ? 'apuntado' : 'apuntados'}{ids.length >= 2 && <> · cuadro de {size}{byes ? ` · ${byes} ${byes === 1 ? 'pasa' : 'pasan'} directo` : ''}</>}</span></h3>
+      <h3>{doubles ? 'Parejas' : 'Jugadores'} <span className="hm-meta">{ids.length} {doubles ? (ids.length === 1 ? 'apuntada' : 'apuntadas') : (ids.length === 1 ? 'apuntado' : 'apuntados')}{ids.length >= 2 && <> · cuadro de {size}{byes ? ` · ${byes} ${byes === 1 ? 'pasa' : 'pasan'} directo` : ''}</>}</span></h3>
 
-      {ids.length === 0 ? <p className="hm-empty">Añade los jugadores que participan en esta eliminatoria.</p> : (
+      {ids.length === 0 ? <p className="hm-empty">Añade {doubles ? 'las parejas' : 'los jugadores'} que participan en esta eliminatoria.</p> : (
         <ol className="ko-list">
           {ids.map((id, i) => (
             <li key={id}>
@@ -108,7 +111,7 @@ export default function AdminKnockout({ category, users, usersById, matches }) {
 
       <div className="adm2-add">
         <Select label={`Añadir jugador a ${category.name}`} value="" onChange={add} size="sm"
-          placeholder={available.length ? '+ Añadir jugador/a…' : 'No queda nadie por añadir'} disabled={!available.length || busy}
+          placeholder={available.length ? (doubles ? '+ Añadir pareja…' : '+ Añadir jugador/a…') : (doubles ? 'No queda ninguna pareja (fórmalas arriba)' : 'No queda nadie por añadir')} disabled={!available.length || busy}
           options={available.map((u) => ({ value: u.id, label: u.name }))} />
       </div>
 
@@ -126,7 +129,7 @@ export default function AdminKnockout({ category, users, usersById, matches }) {
         <button type="button" className="btn btn-primary" disabled={busy || ids.length < 2} onClick={draw}>
           <Shuffle aria-hidden="true" /> Sortear cuadro
         </button>
-        {ids.length < 2 && <p className="field-hint">Hacen falta al menos dos jugadores.</p>}
+        {ids.length < 2 && <p className="field-hint">Hacen falta al menos dos {unit}.</p>}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
     </div>

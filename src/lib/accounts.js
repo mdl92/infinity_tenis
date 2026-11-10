@@ -9,6 +9,8 @@ import { db } from '../firebase';
 
 /** Campos de un partido que guardan el identificador de una persona. */
 const MATCH_FIELDS = ['player1Id', 'player2Id', 'winnerId', 'reportedBy', 'confirmedBy', 'disputedBy'];
+/** En dobles, listas de personas de cada lado del partido. */
+const MATCH_LISTS = ['team1Ids', 'team2Ids', 'memberIds'];
 
 const swap = (list, oldId, newId) => (list ?? []).map((id) => (id === oldId ? newId : id));
 
@@ -25,15 +27,23 @@ export async function moveUserData(oldId, newId, profile) {
   const knockouts = await getDocs(query(collection(db, 'categories'), where('playerIds', 'array-contains', oldId)));
   knockouts.forEach((c) => batch.update(c.ref, { playerIds: swap(c.data().playerIds, oldId, newId) }));
 
-  // Quien aparece como ganador, quien envió o confirmó el resultado… siempre es uno de los dos jugadores
+  // Dobles: sus parejas
+  const teams = await getDocs(query(collection(db, 'teams'), where('memberIds', 'array-contains', oldId)));
+  teams.forEach((t) => batch.update(t.ref, { memberIds: swap(t.data().memberIds, oldId, newId) }));
+
+  // Partidos: en individuales es jugador 1 o 2; en dobles está en memberIds.
+  // Quien aparece como ganador, quien envió o confirmó el resultado… siempre es uno de los participantes
   const seen = new Set();
-  for (const field of ['player1Id', 'player2Id']) {
-    const snap = await getDocs(query(collection(db, 'matches'), where(field, '==', oldId)));
+  const queries = [where('player1Id', '==', oldId), where('player2Id', '==', oldId), where('memberIds', 'array-contains', oldId)];
+  for (const filter of queries) {
+    const snap = await getDocs(query(collection(db, 'matches'), filter));
     snap.forEach((m) => {
       if (seen.has(m.id)) return;
       seen.add(m.id);
       const data = m.data();
       const changes = Object.fromEntries(MATCH_FIELDS.filter((f) => data[f] === oldId).map((f) => [f, newId]));
+      MATCH_LISTS.filter((f) => Array.isArray(data[f]) && data[f].includes(oldId))
+        .forEach((f) => { changes[f] = swap(data[f], oldId, newId); });
       batch.update(m.ref, changes);
     });
   }
@@ -41,5 +51,5 @@ export async function moveUserData(oldId, newId, profile) {
   batch.set(doc(db, 'users', newId), profile);
   batch.delete(doc(db, 'users', oldId));
   await batch.commit();
-  return { groups: groups.size, knockouts: knockouts.size, matches: seen.size };
+  return { groups: groups.size, knockouts: knockouts.size, teams: teams.size, matches: seen.size };
 }

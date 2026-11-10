@@ -1440,3 +1440,16 @@ button.bk-match:focus-visible { outline: 2px solid var(--violet); outline-offset
 @media (max-width: 520px) {
   .users-filters { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- Dobles: parejas de una categoría ---------- */
+.hm-groups-teams { padding-bottom: 0; }
+.teams-admin h3 { margin-bottom: .8rem; }
+.team-avatars { display: inline-flex; flex: none; }
+.team-avatars .avatar + .avatar { margin-left: -8px; box-shadow: 0 0 0 2px #fff; }
+.team-name { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-form { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: .6rem; align-items: center; margin-top: .9rem; }
+.team-plus { font-weight: 800; color: var(--ink-2, #5E5B8F); }
+@media (max-width: 640px) {
+  .team-form { grid-template-columns: minmax(0, 1fr); }
+  .team-plus { display: none; }
+}

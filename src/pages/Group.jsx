@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { arrayRemove, arrayUnion, collection, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { ArrowLeft, ListOrdered, Plus, Shuffle, Swords, X } from 'lucide-react';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useCollection, useMatches, useDoc } from '../hooks/useFirestore';
+import { useCollection, useMatches, useDoc, usePeople } from '../hooks/useFirestore';
 import { newMatch } from '../lib/data';
 import { isParticipant, sortMatches } from '../lib/matches';
+import { isDoubles, isMe, participantsOf } from '../lib/teams';
 import { byName, computeStandings, pairKey, roundRobinPairs } from '../lib/tennis';
 import { CourtSvg, EmptyState, Person } from '../components/ui.jsx';
 import StandingsTable from '../components/StandingsTable.jsx';
@@ -20,13 +21,13 @@ export default function Group() {
 
   const { data: group, loading } = useDoc('groups', groupId);
   const { data: category } = useDoc('categories', group?.categoryId);
-  const { data: users } = useCollection('users');
+  const { data: tournament } = useDoc('tournaments', group?.tournamentId);
+  const { users, teams, byId: usersById } = usePeople();
   const { data: matches } = useMatches([['groupId', '==', groupId]]);
   const { data: siblingGroups } = useCollection('groups', [['categoryId', '==', group?.categoryId]]);
   const [tab, setTab] = useState('matches');
   const [onlyMine, setOnlyMine] = useState(false);
 
-  const usersById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 
   if (loading) return <p className="loading">Cargando…</p>;
   if (!group) {
@@ -34,12 +35,14 @@ export default function Group() {
   }
 
   const playerIds = group.playerIds ?? [];
+  const doubles = isDoubles(tournament);
+  const candidates = participantsOf({ doubles, categoryId: group.categoryId, users, teams, byId: usersById });
   const standings = computeStandings(playerIds, matches);
   const pointsById = Object.fromEntries(standings.map((r, i) => [r.id, { pos: i + 1, pts: r.pts }]));
   // En la alineación, ordenados por su posición en la clasificación
   const players = playerIds.map((id) => usersById[id] ?? { id, name: 'Jugador eliminado' })
     .sort((a, b) => (pointsById[a.id]?.pos ?? 99) - (pointsById[b.id]?.pos ?? 99) || byName(a, b));
-  const inGroup = playerIds.includes(uid);
+  const inGroup = playerIds.some((id) => isMe(usersById, id, uid));
   const visible = sortMatches(matches, uid).filter((m) => !onlyMine || isParticipant(m, uid));
   const played = matches.filter((m) => m.status === 'confirmed').length;
 
@@ -52,7 +55,7 @@ export default function Group() {
     }
     if (!window.confirm(`Se crearán ${pairs.length} partido(s) que faltan para el todos contra todos. ¿Continuar?`)) return;
     const batch = writeBatch(db);
-    pairs.forEach(([a, b]) => batch.set(doc(collection(db, 'matches')), newMatch(group, a, b)));
+    pairs.forEach(([a, b]) => batch.set(doc(collection(db, 'matches')), newMatch(group, a, b, usersById)));
     await batch.commit();
   }
 
@@ -67,7 +70,7 @@ export default function Group() {
           <span className="ball-shape" aria-hidden="true" />
           <p className="group-cat">{category?.name ?? 'Categoría'}</p>
           <h1 className="group-name">{group.name}</h1>
-          <p className="group-count">{players.length} jugadores · {played}/{matches.length} partidos jugados</p>
+          <p className="group-count">{players.length} {doubles ? 'parejas' : 'jugadores'} · {played}/{matches.length} partidos jugados</p>
 
           {siblingGroups.length > 1 && (
             <nav className="group-tabs" aria-label="Grupos de la categoría">
@@ -77,19 +80,19 @@ export default function Group() {
             </nav>
           )}
 
-          {players.length === 0 && <p className="small" style={{ color: '#3F2F9E' }}>Todavía no hay jugadores en este grupo.</p>}
+          {players.length === 0 && <p className="small" style={{ color: '#3F2F9E' }}>Todavía no hay {doubles ? 'parejas' : 'jugadores'} en este grupo.</p>}
           <ul className="player-list">
             {players.map((p) => (
               <li key={p.id} className="player-item">
                 <span className="player-num" aria-label={`Posición ${pointsById[p.id]?.pos}`}>{pointsById[p.id]?.pos}</span>
-                <Person name={p.name} me={p.id === uid} size="sm" />
+                <Person name={p.name} me={isMe(usersById, p.id, uid)} size="sm" />
                 <span className="pts">{pointsById[p.id]?.pts ?? 0}<small>PTS</small></span>
                 {isAdmin && <RemovePlayer group={group} player={p} matches={matches} />}
               </li>
             ))}
           </ul>
 
-          {isAdmin && <AddPlayer group={group} users={users} siblingGroups={siblingGroups} />}
+          {isAdmin && <AddPlayer group={group} candidates={candidates} doubles={doubles} siblingGroups={siblingGroups} />}
         </aside>
 
         {/* Zona derecha: partidos y clasificación */}
@@ -147,11 +150,12 @@ export function RemovePlayer({ group, player, matches }) {
   return <button className="icon-btn danger" aria-label={`Quitar a ${player.name}`} onClick={remove}><X /></button>;
 }
 
-export function AddPlayer({ group, users, siblingGroups }) {
+export function AddPlayer({ group, candidates, doubles, siblingGroups }) {
   const [selected, setSelected] = useState('');
-  // Un jugador solo puede estar en un grupo por categoría
+  // Un jugador (o una pareja) solo puede estar en un grupo por categoría
   const taken = new Set(siblingGroups.flatMap((g) => g.playerIds ?? []));
-  const available = users.filter((u) => !taken.has(u.id)).sort(byName);
+  const available = candidates.filter((u) => !taken.has(u.id)).sort(byName);
+  const who = doubles ? 'pareja' : 'jugador';
 
   async function add() {
     if (!selected) return;
@@ -161,10 +165,10 @@ export function AddPlayer({ group, users, siblingGroups }) {
 
   return (
     <div className="group-admin">
-      <p>Añadir jugador/a</p>
+      <p>{doubles ? 'Añadir pareja' : 'Añadir jugador/a'}</p>
       <div className="inline-form">
-        <Select label="Jugador a añadir" value={selected} onChange={setSelected} size="sm"
-          placeholder={available.length ? 'Elige un jugador…' : 'No quedan jugadores libres'} disabled={!available.length}
+        <Select label={`${who} a añadir`} value={selected} onChange={setSelected} size="sm"
+          placeholder={available.length ? `Elige ${doubles ? 'una pareja' : 'un jugador'}…` : `No quedan ${doubles ? 'parejas libres (fórmalas en Administración)' : 'jugadores libres'}`} disabled={!available.length}
           options={available.map((u) => ({ value: u.id, label: u.name }))} />
         <button className="btn btn-primary btn-sm" disabled={!selected} onClick={add}><Plus /> Añadir</button>
       </div>

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useTournament } from '../../context/TournamentContext.jsx';
 import { useCollection } from '../../hooks/useFirestore';
 import { byCategory } from '../../lib/tennis';
+import { isDoubles } from '../../lib/teams';
 import { clubPhoto, FooterLogo } from '../../components/ui.jsx';
 import Select from '../../components/Select.jsx';
 import { TournamentModal } from './AdminModals.jsx';
@@ -43,7 +44,7 @@ export default function AdminLayout() {
           <h1>{active?.name ?? 'Sin torneo'}</h1>
           {active && (
             <p className="hm-sub">
-              Fase de grupos{cats.length > 0 && <> · {cats.length === 1 ? 'Categoría' : 'Categorías'} {cats.map((c) => c.name).join(', ')}</>}
+              {isDoubles(active) ? 'Dobles' : 'Individual'}{cats.length > 0 && <> · {cats.length === 1 ? 'Categoría' : 'Categorías'} {cats.map((c) => c.name).join(', ')}</>}
             </p>
           )}
           {(dates || active?.venue) && (
@@ -80,6 +81,7 @@ export default function AdminLayout() {
       {modal && (
         <TournamentModal
           tournament={modal === 'edit' ? active : null}
+          canChangeModality={modal === 'new' || cats.length === 0}
           onClose={() => setModal(null)}
           onCreated={choose}
         />

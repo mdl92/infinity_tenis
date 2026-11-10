@@ -1,5 +1,6 @@
 import { computeStandings, POINTS } from '../lib/tennis';
 import { Person } from './ui.jsx';
+import { isMe } from '../lib/teams';
 
 export default function StandingsTable({ playerIds, matches, usersById, myId }) {
   const rows = computeStandings(playerIds, matches);
@@ -24,9 +25,9 @@ export default function StandingsTable({ playerIds, matches, usersById, myId }) 
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={r.id} className={r.id === myId ? 'me' : undefined}>
+              <tr key={r.id} className={isMe(usersById, r.id, myId) ? 'me' : undefined}>
                 <td className="pos"><span className="pos-badge">{i + 1}</span></td>
-                <td><Person name={usersById[r.id]?.name ?? 'Jugador eliminado'} me={r.id === myId} /></td>
+                <td><Person name={usersById[r.id]?.name ?? 'Jugador eliminado'} me={isMe(usersById, r.id, myId)} /></td>
                 <td className="num">{r.pj}</td>
                 <td className="num">{r.pg}</td>
                 <td className="num hide-sm">{r.pp}</td>

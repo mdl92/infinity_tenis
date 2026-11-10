@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import { buildDirectory } from '../lib/teams';
 
 /**
  * Escucha una colección en tiempo real.
@@ -66,16 +67,39 @@ export function useDoc(name, id) {
 }
 
 /**
- * Partidos, sin los que ya no tienen a ninguno de sus dos jugadores (ambos dados de baja).
- * Mientras se cargan los usuarios no se oculta nada, para no hacer parpadear las listas.
+ * Participantes: jugadores y parejas de dobles juntos, por ID, con el nombre listo para mostrar.
+ * `byId[id].name` sirve igual para una persona que para una pareja («Ana Ruiz / Laura Martín»).
+ */
+export function usePeople() {
+  const { data: users, loading: loadingUsers } = useCollection('users');
+  const { data: teams, loading: loadingTeams } = useCollection('teams');
+  const byId = useMemo(() => buildDirectory(users, teams), [users, teams]);
+  return { users, teams, byId, loading: loadingUsers || loadingTeams };
+}
+
+/** Partidos que juega una persona: individuales (como jugador 1 o 2) y dobles (en cualquiera de las parejas). */
+export function useMyMatches(uid) {
+  const a = useCollection('matches', [['player1Id', '==', uid]]);
+  const b = useCollection('matches', [['player2Id', '==', uid]]);
+  const c = useCollection('matches', [['memberIds', 'array-contains', uid]]);
+  const data = useMemo(() => {
+    const byId = new Map();
+    [...a.data, ...b.data, ...c.data].forEach((m) => byId.set(m.id, m));
+    return [...byId.values()];
+  }, [a.data, b.data, c.data]);
+  return { data, loading: a.loading || b.loading || c.loading };
+}
+
+/**
+ * Partidos, sin los que ya no tienen a ninguno de sus dos participantes (dados de baja).
+ * Mientras se cargan los participantes no se oculta nada, para no hacer parpadear las listas.
  */
 export function useMatches(filters = []) {
   const res = useCollection('matches', filters);
-  const { data: users, loading: loadingUsers } = useCollection('users');
+  const { users, byId, loading } = usePeople();
   const data = useMemo(() => {
-    if (loadingUsers || users.length === 0) return res.data;
-    const ids = new Set(users.map((u) => u.id));
-    return res.data.filter((m) => ids.has(m.player1Id) || ids.has(m.player2Id));
-  }, [res.data, users, loadingUsers]);
+    if (loading || users.length === 0) return res.data;
+    return res.data.filter((m) => byId[m.player1Id] || byId[m.player2Id]);
+  }, [res.data, users, byId, loading]);
   return { ...res, data };
 }
