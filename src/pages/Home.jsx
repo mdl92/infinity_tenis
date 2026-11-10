@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CalendarCheck, CalendarDays, ChevronRight, Info, LogOut, MapPin, Settings, Trophy, User,
+  CalendarCheck, CalendarDays, ChevronRight, Download, Info, LogOut, MapPin, Settings, Trophy, User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { TournamentSelect, useTournament } from '../context/TournamentContext.jsx';
@@ -15,6 +15,7 @@ import FloatingDock from '../components/FloatingDock.jsx';
 import Bracket from '../components/Bracket.jsx';
 import { isBye, isKnockout, matchPlace } from '../lib/bracket';
 import { isDoubles, isMe } from '../lib/teams';
+import { useInstallApp } from '../lib/install';
 
 const dayFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
 const day = (iso) => {
@@ -46,6 +47,7 @@ export default function Home() {
   const [chosen, setChosen] = useState(null);
   const [modal, setModal] = useState(null); // login | mine | results | how
   const accountRef = useRef(null);
+  const { canInstall, install } = useInstallApp();
 
   const cats = [...categories].sort(byCategory);
   const myCat = cats.find((c) => (isKnockout(c)
@@ -75,6 +77,11 @@ export default function Home() {
       <header className="hm-hero">
         <div className="hm-hero-inner">
           <div className="hm-account" ref={accountRef}>
+            {canInstall && (
+              <button type="button" className="hm-acc-btn" onClick={install} aria-label="Instalar la app en este dispositivo">
+                <Download /> <span>Instalar app</span>
+              </button>
+            )}
             {user ? (
               <>
                 <span className="hm-hello"><Avatar name={profile?.name} me size="sm" /> Hola, {firstName}</span>
