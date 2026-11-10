@@ -12,6 +12,7 @@ import {
 } from '../../lib/access';
 import { byName } from '../../lib/tennis';
 import { isKnockout } from '../../lib/bracket';
+import { moveUserData } from '../../lib/accounts';
 import { Avatar, Modal } from '../../components/ui.jsx';
 import { Segmented } from '../../components/Select.jsx';
 
@@ -143,11 +144,18 @@ function UserModal({ users, editing, isSelf, onClose, onDone }) {
   const byEmail = Boolean(editing) && !editing.username;
   const ready = byEmail ? Boolean(firstName) : Boolean(firstName && lastName);
   const username = ready && !byEmail ? usernameOf(firstName, lastName) : '';
-  const password = !ready || byEmail ? '' : editing ? passwordOf(editing) : initialPassword(firstName, lastName);
+  const newPassword = ready && !byEmail ? initialPassword(firstName, lastName) : '';
+  // ¿Cambia cómo entra (usuario o contraseña) respecto a su cuenta actual?
+  const credChanged = Boolean(editing) && Boolean(username)
+    && (username !== authUsernameOf(editing) || newPassword !== passwordOf(editing));
+  // A otra persona se le crea una cuenta nueva; a uno mismo no (cambiaría de cuenta en mitad de la sesión)
+  const newAccount = credChanged && !isSelf;
+  const password = !ready || byEmail ? '' : editing && !newAccount ? passwordOf(editing) : newPassword;
   // Mientras se guarda no se comprueba: el perfil recién creado ya sale en `users` y se vería a sí mismo como repetido
   const taken = !busy && Boolean(username) && usernameTaken(users, username, editing?.id);
   const loginChanged = editing && username && username !== editing.username;
   const name = [firstName, lastName, secondLastName].filter(Boolean).join(' ');
+  const oldLogin = editing?.firstName && editing?.lastName ? `${editing.authFirstName ?? editing.firstName} ${editing.authLastName ?? editing.lastName}` : '';
 
   async function create() {
     const uid = await createAuthAccount(emailFor(username), authPassword(password));
@@ -158,7 +166,26 @@ function UserModal({ users, editing, isSelf, onClose, onDone }) {
     return `${name} dado de alta. Entra como «${firstName} ${lastName}» con la contraseña «${password}».`;
   }
 
+  /** Cuenta nueva con el usuario y la contraseña del nombre nuevo, y traslado de todos sus datos. */
+  async function replaceAccount() {
+    const newId = await createAuthAccount(emailFor(username), authPassword(password));
+    const moved = await moveUserData(editing.id, newId, {
+      name, firstName, lastName, secondLastName, username, role: form.role,
+      authUsername: username, authFirstName: firstName, authLastName: lastName,
+      createdAt: editing.createdAt ?? serverTimestamp(),
+    });
+    const what = [
+      moved.groups && `${moved.groups} ${moved.groups === 1 ? 'grupo' : 'grupos'}`,
+      moved.knockouts && `${moved.knockouts} ${moved.knockouts === 1 ? 'eliminatoria' : 'eliminatorias'}`,
+      moved.matches && `${moved.matches} ${moved.matches === 1 ? 'partido' : 'partidos'}`,
+    ].filter(Boolean).join(', ');
+    return `${name} actualizado. Ahora entra como «${firstName} ${lastName}» con la contraseña «${password}»`
+      + `${what ? ` (se han pasado a su cuenta nueva ${what})` : ''}. `
+      + `Su cuenta antigua${oldLogin ? ` («${oldLogin}»)` : ''} ya no sirve; si quieres, bórrala en Firebase › Authentication.`;
+  }
+
   async function update() {
+    if (newAccount) return replaceAccount();
     const data = { name, firstName, lastName, secondLastName };
     if (!isSelf) data.role = form.role;
     if (!byEmail) {
@@ -187,7 +214,9 @@ function UserModal({ users, editing, isSelf, onClose, onDone }) {
     } catch (err) {
       console.error(err);
       setError(err.code === 'auth/email-already-in-use'
-        ? 'Ya existe una cuenta con ese nombre y primer apellido.'
+        ? (editing
+          ? `Ya existe una cuenta de acceso para «${firstName} ${lastName}» (puede ser de alguien dado de baja o de un cambio de nombre anterior). Bórrala en Firebase › Authentication y vuelve a intentarlo.`
+          : 'Ya existe una cuenta con ese nombre y primer apellido.')
         : 'No se ha podido guardar. Inténtalo de nuevo.');
       setBusy(false);
     }
@@ -197,7 +226,11 @@ function UserModal({ users, editing, isSelf, onClose, onDone }) {
     <Modal
       title={editing ? 'Editar datos' : 'Dar de alta'}
       description={editing
-        ? (byEmail ? 'Esta cuenta entra con su email; aquí solo cambias cómo se muestra el nombre.' : 'Si cambias el nombre o el primer apellido, entrará con los nuevos. La contraseña no cambia.')
+        ? (byEmail
+          ? 'Esta cuenta entra con su email; aquí solo cambias cómo se muestra el nombre.'
+          : isSelf
+            ? 'Si cambias tu nombre o primer apellido, entrarás con los nuevos, pero tu contraseña no cambia.'
+            : 'Si cambias el nombre o el primer apellido, se le crea una cuenta nueva con su contraseña nueva y se le pasan sus grupos y partidos.')
         : 'La contraseña se genera sola: inicial del nombre + primer apellido.'}
       onClose={onClose}
     >
@@ -224,12 +257,14 @@ function UserModal({ users, editing, isSelf, onClose, onDone }) {
           </div>
         )}
 
-        {ready && !byEmail && (!editing || loginChanged || taken) && (
+        {ready && !byEmail && (!editing || loginChanged || credChanged || taken) && (
           <div className={`notice ${taken ? 'notice-coral' : 'notice-sky'}`} style={{ marginBottom: '1rem' }}>
             <span>
               {taken
                 ? <>Ya hay alguien que entra como «{firstName} {lastName}». Escribe el nombre de otra forma (por ejemplo, con el segundo nombre).</>
-                : <>{editing ? 'Ahora entrará' : 'Entrará'} como <b>{firstName} {lastName}</b> con la contraseña <code className="pass">{password}</code></>}
+                : newAccount
+                  ? <>Se le creará una cuenta nueva: entrará como <b>{firstName} {lastName}</b> con la contraseña <code className="pass">{password}</code>. Sus grupos, eliminatorias y partidos pasan a la cuenta nueva y la antigua{oldLogin ? <> («{oldLogin}»)</> : null} dejará de funcionar.</>
+                  : <>{editing ? 'Ahora entrará' : 'Entrará'} como <b>{firstName} {lastName}</b> con la contraseña <code className="pass">{password}</code></>}
             </span>
           </div>
         )}
