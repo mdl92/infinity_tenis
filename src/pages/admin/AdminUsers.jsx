@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch, arrayRemove,
 } from 'firebase/firestore';
-import { Plus } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { createAuthAccount, db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useTournament } from '../../context/TournamentContext.jsx';
@@ -14,13 +14,19 @@ import { byName } from '../../lib/tennis';
 import { isKnockout } from '../../lib/bracket';
 import { moveUserData } from '../../lib/accounts';
 import { Avatar, Modal } from '../../components/ui.jsx';
-import { Segmented } from '../../components/Select.jsx';
+import Select, { Segmented } from '../../components/Select.jsx';
 
 /** Cómo entra cada persona: nombre + primer apellido y su contraseña automática. */
 function accessOf(u) {
   if (!u.username || !u.firstName || !u.lastName) return null; // p. ej. el primer admin, que entra con su email
   return { login: `${u.firstName} ${u.lastName}`, password: passwordOf(u) };
 }
+
+/** Texto para buscar: minúsculas y sin tildes («Martín» se encuentra escribiendo «martin»). */
+const norm = (t = '') => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+const NO_GROUP = '__sin-grupo__';
+const ROLES = { all: 'all', player: 'player', admin: 'admin' };
 
 /** ¿Hay otra persona que ya entra (o entraba) con ese usuario? */
 const usernameTaken = (users, username, exceptId) =>
@@ -40,6 +46,9 @@ export default function AdminUsers() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [msg, setMsg] = useState({ type: '', text: '' });
+  const [search, setSearch] = useState('');
+  const [place, setPlace] = useState(''); // '' = todas · id de categoría · NO_GROUP
+  const [role, setRole] = useState(ROLES.all);
 
   async function removeUser(u) {
     if (!window.confirm(`¿Dar de baja a ${u.name}? Se quitará de sus grupos y ya no podrá entrar.`)) return;
@@ -65,6 +74,26 @@ export default function AdminUsers() {
 
   const sorted = [...users].sort(byName);
 
+  // ---- Filtro: nombre (o cómo entra) · categoría o «sin grupo» · rol ----
+  const inCategory = (id, c) => (isKnockout(c)
+    ? Boolean(c.playerIds?.includes(id))
+    : groups.some((g) => g.categoryId === c.id && g.playerIds?.includes(id)));
+  const q = norm(search);
+  const shown = sorted.filter((u) => {
+    if (role !== ROLES.all && (u.role === 'admin') !== (role === ROLES.admin)) return false;
+    if (place === NO_GROUP && (u.role === 'admin' || groupsOf(u.id).length > 0)) return false;
+    if (place && place !== NO_GROUP && !inCategory(u.id, categories.find((c) => c.id === place) ?? {})) return false;
+    if (q && !norm(`${u.name} ${accessOf(u)?.login ?? ''}`).includes(q)) return false;
+    return true;
+  });
+  const filtering = Boolean(q || place || role !== ROLES.all);
+  const clearFilters = () => { setSearch(''); setPlace(''); setRole(ROLES.all); };
+  const placeOptions = [
+    { value: '', label: 'Todas las categorías' },
+    ...[...categories].sort(byName).map((c) => ({ value: c.id, label: c.name, hint: isKnockout(c) ? 'Eliminatoria' : undefined })),
+    { value: NO_GROUP, label: 'Sin grupo' },
+  ];
+
   return (
     <>
       {msg.text && (
@@ -78,6 +107,23 @@ export default function AdminUsers() {
           <button type="button" className="hm-tool adm2-head-btn" onClick={() => setOpen(true)}><Plus aria-hidden="true" /> Dar de alta</button>
         </div>
         <div className="hm-groups">
+      <div className="users-filters" role="search">
+        <label className="users-search">
+          <Search aria-hidden="true" />
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre…" aria-label="Buscar jugador por nombre" />
+          {search && <button type="button" className="icon-btn" onClick={() => setSearch('')} aria-label="Borrar búsqueda"><X /></button>}
+        </label>
+        <Select label="Filtrar por categoría" value={place} onChange={setPlace} size="sm" options={placeOptions} />
+        <Segmented label="Filtrar por rol" value={role} onChange={setRole}
+          options={[{ value: ROLES.all, label: 'Todos' }, { value: ROLES.player, label: 'Jugadores' }, { value: ROLES.admin, label: 'Admins' }]} />
+      </div>
+      {filtering && (
+        <p className="users-count">
+          {shown.length} de {sorted.length} {sorted.length === 1 ? 'persona' : 'personas'}
+          <button type="button" className="link" onClick={clearFilters}>Quitar filtros</button>
+        </p>
+      )}
       <div className="hm-card users-table">
         {loading && <p className="loading" style={{ padding: '1.25rem' }}>Cargando…</p>}
         <div className="table-scroll">
@@ -86,7 +132,10 @@ export default function AdminUsers() {
               <tr><th>Nombre</th><th className="hide-sm">Entra como</th><th>Contraseña</th><th className="hide-sm">Grupo</th><th className="actions" aria-label="Acciones" /></tr>
             </thead>
             <tbody>
-              {sorted.map((u) => {
+              {!loading && shown.length === 0 && (
+                <tr><td colSpan={5} className="muted users-empty">Nadie coincide con estos filtros.</td></tr>
+              )}
+              {shown.map((u) => {
                 const acc = accessOf(u);
                 return (
                   <tr key={u.id}>

@@ -1420,3 +1420,23 @@ button.bk-match:focus-visible { outline: 2px solid var(--violet); outline-offset
 @media (max-width: 640px) {
   .foot-logo { padding-bottom: 6rem; } /* deja sitio a los botones flotantes */
 }
+
+/* ---------- Administración › Jugadores: filtro ---------- */
+.users-filters { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: .7rem; align-items: center; }
+.users-search { position: relative; display: flex; align-items: center; }
+.users-search > svg { position: absolute; left: .85rem; width: 17px; height: 17px; color: var(--ink-2, #5E5B8F); pointer-events: none; }
+.users-search input { width: 100%; height: 44px; padding: 0 2.6rem 0 2.5rem; border-radius: 12px; background: #fff; }
+.users-search input::-webkit-search-cancel-button { display: none; }
+.users-search .icon-btn { position: absolute; right: .3rem; width: 34px; height: 34px; }
+.users-search .icon-btn svg { width: 16px; height: 16px; }
+.users-filters .segmented { height: 44px; padding: 3px; }
+.users-filters .segmented button { height: 36px; }
+.users-count { display: flex; align-items: center; gap: .9rem; margin: -.4rem 0 0; font-size: .9rem; color: var(--ink-2, #5E5B8F); }
+.users-empty { padding: 1.4rem 1rem !important; text-align: center; }
+@media (max-width: 860px) {
+  .users-filters { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .users-search { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .users-filters { grid-template-columns: minmax(0, 1fr); }
+}
