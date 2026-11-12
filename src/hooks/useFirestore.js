@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { buildDirectory } from '../lib/teams';
@@ -70,11 +70,27 @@ export function useDoc(name, id) {
  * Participantes: jugadores y parejas de dobles juntos, por ID, con el nombre listo para mostrar.
  * `byId[id].name` sirve igual para una persona que para una pareja («Ana Ruiz / Laura Martín»).
  */
-export function usePeople() {
+const PeopleContext = createContext(null);
+
+/**
+ * Carga jugadores y parejas UNA sola vez para toda la web (en main.jsx) y los comparte con todas las
+ * pantallas. Antes cada pantalla, lista y partido desplegado abría sus propias conexiones a Firebase.
+ */
+export function PeopleProvider({ children }) {
   const { data: users, loading: loadingUsers } = useCollection('users');
   const { data: teams, loading: loadingTeams } = useCollection('teams');
-  const byId = useMemo(() => buildDirectory(users, teams), [users, teams]);
-  return { users, teams, byId, loading: loadingUsers || loadingTeams };
+  const loading = loadingUsers || loadingTeams;
+  const value = useMemo(
+    () => ({ users, teams, byId: buildDirectory(users, teams), loading }),
+    [users, teams, loading]
+  );
+  return createElement(PeopleContext.Provider, { value }, children);
+}
+
+export function usePeople() {
+  const people = useContext(PeopleContext);
+  if (!people) throw new Error('usePeople necesita <PeopleProvider> (está en main.jsx)');
+  return people;
 }
 
 /** Partidos que juega una persona: individuales (como jugador 1 o 2) y dobles (en cualquiera de las parejas). */

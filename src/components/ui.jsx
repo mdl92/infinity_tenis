@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { X } from 'lucide-react';
-import club from '../assets/render_club.png';
+import club from '../assets/render_club.jpg';
 import infinityLogo from '../assets/infinity-yellow.svg';
 
 /** Pelota de tenis ilustrada (amarilla, con costuras blancas). */

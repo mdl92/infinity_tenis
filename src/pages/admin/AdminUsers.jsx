@@ -6,7 +6,7 @@ import { Plus, Search, X } from 'lucide-react';
 import { createAuthAccount, db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useTournament } from '../../context/TournamentContext.jsx';
-import { useCollection } from '../../hooks/useFirestore';
+import { useCollection, usePeople } from '../../hooks/useFirestore';
 import {
   authPassword, authUsernameOf, emailFor, initialPassword, passwordOf, usernameOf,
 } from '../../lib/access';
@@ -34,11 +34,11 @@ const usernameTaken = (users, username, exceptId) =>
 
 export default function AdminUsers() {
   const { user } = useAuth();
-  const { data: users, loading } = useCollection('users');
+  const { users, teams: allTeams, loading } = usePeople();
   const { active } = useTournament();
   const { data: groups } = useCollection('groups', [['tournamentId', '==', active?.id]]);
   const { data: categories } = useCollection('categories', [['tournamentId', '==', active?.id]]);
-  const { data: teams } = useCollection('teams', [['tournamentId', '==', active?.id]]);
+  const teams = allTeams.filter((t) => t.tournamentId === active?.id);
   // Dónde juega: directamente o, en dobles, con su pareja
   const idsOf = (id) => [id, ...teams.filter((t) => t.memberIds?.includes(id)).map((t) => t.id)];
   const groupsOf = (id) => [

@@ -2,13 +2,16 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
+import { PeopleProvider } from './hooks/useFirestore';
 import './styles.css';
 import './lib/install.js'; // escucha cuanto antes el aviso de «se puede instalar»
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
-      <App />
+      <PeopleProvider>
+        <App />
+      </PeopleProvider>
     </AuthProvider>
   </React.StrictMode>
 );

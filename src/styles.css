@@ -112,7 +112,13 @@ select { appearance: none; padding-right: 2.4rem; cursor: pointer;
 input:focus, select:focus, textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--violet), 0 0 0 3px var(--lavender); }
 input::placeholder { color: #A4AACC; }
 .field { display: grid; gap: .45rem; margin-bottom: 1.1rem; }
-.field > span { font-size: .86rem; font-weight: 700; }
+.field > span, .field > label { font-size: .86rem; font-weight: 700; }
+.password-field { position: relative; }
+.password-field input { padding-right: 3.2rem; }
+.password-toggle { position: absolute; top: 0; right: 0; height: 100%; width: 3rem; display: grid; place-items: center; border: 0; background: none; color: var(--navy-2); cursor: pointer; border-radius: var(--r-sm); }
+.password-toggle:hover { color: var(--violet); }
+.password-toggle:focus-visible { outline: 2px solid var(--violet); outline-offset: -4px; }
+.password-toggle svg { width: 20px; height: 20px; }
 .field-hint { font-size: .8rem; color: var(--navy-2); font-weight: 500 !important; }
 .form-row { display: grid; gap: 0 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .inline-form { display: flex; gap: .7rem; flex-wrap: wrap; align-items: center; }
@@ -651,7 +657,7 @@ button.score-row { width: 100%; border-left: 0; border-right: 0; border-bottom: 
 .lb-intro p { margin: .15rem 0 0;  font-size: 0.92rem; color: var(--sky); }
 .lb-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: .8rem; margin-right: 70px; }
 .lb-form .field { margin: 0; }
-.lb-form .field > span { color: var(--sky); }
+.lb-form .field > span, .lb-form .field > label { color: var(--sky); }
 .lb-form .btn { background: var(--yellow); color: var(--navy); }
 .lb-error, .lb-demo { grid-column: 1 / -1; margin: 0; font-size: .86rem; font-weight: 600; }
 .lb-error { background: #fff; color: var(--coral); padding: .55rem .8rem; }
