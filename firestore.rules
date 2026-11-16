@@ -37,6 +37,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---- Juego secreto (peloteo): cada persona con sesión guarda solo su propio récord, y solo para subirlo ----
+    match /peloteo/{uid} {
+      function validBest() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['best', 'updatedAt'])
+          && d.best is int && d.best >= 0 && d.best < 100000
+          && d.updatedAt == request.time;
+      }
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid && validBest();
+      allow update: if signedIn() && request.auth.uid == uid && validBest()
+        && request.resource.data.best > resource.data.best;
+      allow delete: if isAdmin();
+    }
+
     // ---- Partidos ----
     // En dobles, player1Id/player2Id son parejas y el partido guarda quién juega en cada lado:
     // team1Ids (lado de player1Id), team2Ids y memberIds (los cuatro).

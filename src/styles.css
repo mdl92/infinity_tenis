@@ -1459,3 +1459,31 @@ button.bk-match:focus-visible { outline: 2px solid var(--violet); outline-offset
   .team-form { grid-template-columns: minmax(0, 1fr); }
   .team-plus { display: none; }
 }
+
+/* ---------- Easter egg: peloteo (se abre tocando el logo del pie) ----------
+   Ordenador: el marcador, solo texto, a la derecha de la pista. Móvil: encima. */
+.modal-game { width: min(620px, calc(100vw - 32px)); }
+.tg-loading { margin: 2rem 0; text-align: center; color: var(--navy-2); }
+
+.tg { display: flex; gap: 1.6rem; align-items: flex-end; user-select: none; -webkit-user-select: none; }
+.tg-canvas { flex: none; display: block; width: min(340px, calc((100dvh - 190px) * 340 / 560)); height: auto; aspect-ratio: 340 / 560;
+  border-radius: 12px; box-shadow: 0 6px 24px rgba(32, 43, 104, .25); cursor: crosshair; touch-action: none; }
+
+.tg-score { display: flex; flex-direction: column; gap: 1rem; min-width: 0; padding-bottom: .3rem; }
+.tg-score p { margin: 0; }
+.tg-count { color: var(--navy-2); font-size: 1rem; }
+.tg-count b { display: block; font-size: 5.5rem; font-weight: 900; line-height: .85; letter-spacing: -.06em; color: var(--navy); font-variant-numeric: tabular-nums; }
+.tg-count.is-record b { color: var(--violet); }
+.tg-meta { display: flex; flex-direction: column; gap: .15rem; font-size: .92rem; color: var(--navy); }
+.tg-meta span + span { color: var(--navy-2); }
+.tg-hint { font-size: .78rem; line-height: 1.4; color: var(--navy-2); }
+
+@media (max-width: 640px) {
+  .modal-game { width: calc(100vw - 16px); }
+  .tg { flex-direction: column-reverse; align-items: center; gap: .8rem; }
+  .tg-canvas { width: min(100%, 340px, calc((100dvh - 290px) * 340 / 560)); }
+  .tg-score { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .3rem 1rem; padding: 0; }
+  .tg-count b { display: inline; font-size: 2.6rem; }
+  .tg-meta { text-align: right; font-size: .85rem; }
+  .tg-hint { width: 100%; font-size: .74rem; }
+}

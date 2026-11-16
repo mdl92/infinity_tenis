@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarCheck, CalendarDays, ChevronRight, Download, Info, LogOut, MapPin, Settings, Trophy, User,
@@ -16,6 +16,9 @@ import Bracket from '../components/Bracket.jsx';
 import { isBye, isKnockout, matchPlace } from '../lib/bracket';
 import { isDoubles, isMe } from '../lib/teams';
 import { useInstallApp } from '../lib/install';
+
+// Easter egg: solo se descarga cuando alguien toca el logo del pie
+const TennisGame = lazy(() => import('../components/TennisGame.jsx'));
 
 const dayFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
 const day = (iso) => {
@@ -45,7 +48,7 @@ export default function Home() {
   const { data: matches } = useMatches([['tournamentId', '==', tid]]);
   const { byId: usersById } = usePeople();
   const [chosen, setChosen] = useState(null);
-  const [modal, setModal] = useState(null); // login | mine | results | how
+  const [modal, setModal] = useState(null); // login | mine | results | how | game
   const accountRef = useRef(null);
   const { canInstall, install } = useInstallApp();
 
@@ -174,7 +177,7 @@ export default function Home() {
 
       </main>
 
-      <FooterLogo onPhoto />
+      <FooterLogo onPhoto onSecret={() => setModal('game')} />
 
       {modal === 'login' && (
         <Modal title="Identifícate" description="Para ver tus partidos y apuntar resultados." onClose={() => setModal(null)}>
@@ -196,6 +199,13 @@ export default function Home() {
                 const c = categories.find((x) => x.id === m.categoryId);
                 return [c && catTitle(c), groupName(m)].filter(Boolean).join(' · ');
               }} />}
+        </Modal>
+      )}
+      {modal === 'game' && (
+        <Modal className="modal-game" title="Peloteo" description="Has encontrado el juego secreto." onClose={() => setModal(null)}>
+          <Suspense fallback={<p className="tg-loading">Preparando la pista…</p>}>
+            <TennisGame />
+          </Suspense>
         </Modal>
       )}
       {modal === 'how' && (

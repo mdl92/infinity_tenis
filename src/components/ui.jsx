@@ -92,10 +92,11 @@ export function InfinityMark({ className = '' }) {
  * `onPhoto`: en blanco, sobre la foto del club; si no, en azul marino sobre el fondo claro.
  * (Se pinta con una máscara del logo para poder darle cualquier color.)
  */
-export function FooterLogo({ onPhoto = false }) {
+/** Logo del pie. Con `onSecret`, tocarlo abre el easter egg (sin pista visual a propósito). */
+export function FooterLogo({ onPhoto = false, onSecret }) {
   return (
     <footer className={`foot-logo ${onPhoto ? 'on-photo' : ''}`}>
-      <span role="img" aria-label="Infinity" style={{ '--logo': `url(${infinityLogo})` }} />
+      <span role="img" aria-label="Infinity" style={{ '--logo': `url(${infinityLogo})` }} onClick={onSecret} />
     </footer>
   );
 }
@@ -135,7 +136,7 @@ export function Person({ name, me, size }) {
 }
 
 /** Modal nativo (<dialog>): gestiona el foco, Escape y el fondo oscurecido. */
-export function Modal({ title, description, onClose, children }) {
+export function Modal({ title, description, onClose, className = '', children }) {
   const ref = useRef(null);
   useEffect(() => {
     const dialog = ref.current;
@@ -146,7 +147,7 @@ export function Modal({ title, description, onClose, children }) {
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className={`modal ${className}`}
       aria-labelledby="modal-title"
       onCancel={(e) => { e.preventDefault(); onClose(); }}
       onMouseDown={(e) => { if (e.target === ref.current) onClose(); }}
