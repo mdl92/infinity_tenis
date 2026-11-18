@@ -1476,6 +1476,7 @@ button.bk-match:focus-visible { outline: 2px solid var(--violet); outline-offset
 .tg-count.is-record b { color: var(--violet); }
 .tg-meta { display: flex; flex-direction: column; gap: .15rem; font-size: .92rem; color: var(--navy); }
 .tg-meta span + span { color: var(--navy-2); }
+.tg-error { font-size: .8rem; line-height: 1.35; color: var(--coral); }
 .tg-hint { font-size: .78rem; line-height: 1.4; color: var(--navy-2); }
 
 @media (max-width: 640px) {
@@ -1485,5 +1486,5 @@ button.bk-match:focus-visible { outline: 2px solid var(--violet); outline-offset
   .tg-score { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .3rem 1rem; padding: 0; }
   .tg-count b { display: inline; font-size: 2.6rem; }
   .tg-meta { text-align: right; font-size: .85rem; }
-  .tg-hint { width: 100%; font-size: .74rem; }
+  .tg-hint, .tg-error { width: 100%; font-size: .74rem; }
 }

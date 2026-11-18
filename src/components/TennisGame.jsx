@@ -88,21 +88,19 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 let guestBest = 0;
 
 async function loadUserBest(uid) {
-  try {
-    const snap = await getDoc(doc(db, 'peloteo', uid));
-    return snap.exists() ? Number(snap.data().best) || 0 : 0;
-  } catch (e) {
-    console.warn('No se pudo leer el récord:', e);
-    return 0;
-  }
+  const snap = await getDoc(doc(db, 'peloteo', uid));
+  return snap.exists() ? Number(snap.data().best) || 0 : 0;
 }
 async function saveUserBest(uid, best) {
-  try {
-    await setDoc(doc(db, 'peloteo', uid), { best, updatedAt: serverTimestamp() });
-  } catch (e) {
-    console.warn('No se pudo guardar el récord:', e);
-  }
+  await setDoc(doc(db, 'peloteo', uid), { best, updatedAt: serverTimestamp() });
 }
+// Si Firebase lo rechaza (p. ej. reglas sin publicar), se avisa en el propio juego
+const syncMessage = (what, e) => {
+  console.warn(`Peloteo: no se pudo ${what} el récord`, e);
+  return e?.code === 'permission-denied'
+    ? `Firebase no deja ${what} tu récord (revisa las reglas de Firestore).`
+    : `No se ha podido ${what} tu récord.`;
+};
 
 // ─── Dibuja tenista ───────────────────────────────────────────────────────────
 function drawPlayer(ctx, x, y, shirt, shorts, facingDown, swing) {
@@ -392,10 +390,11 @@ export default function TennisGame() {
   const gsRef = useRef(null);
   if (!gsRef.current) gsRef.current = mkState(uid ? 0 : guestBest);
   // El bucle del juego guarda el récord con esta función (siempre la de la sesión actual)
+  const [syncError, setSyncError] = useState(null);
   const saveBestRef = useRef(null);
   saveBestRef.current = (best) => {
-    if (uid) saveUserBest(uid, best);
-    else guestBest = best;
+    if (!uid) { guestBest = best; return; }
+    saveUserBest(uid, best).then(() => setSyncError(null), (e) => setSyncError(syncMessage('guardar', e)));
   };
   const frameRef = useRef(0);
   const pointerXRef = useRef(W / 2);
@@ -429,8 +428,8 @@ export default function TennisGame() {
       if (!alive) return;
       const local = gsRef.current.best; // por si ya ha batido algo mientras cargaba
       gsRef.current = { ...gsRef.current, best: Math.max(saved, local) };
-      if (local > saved) saveUserBest(uid, local);
-    });
+      if (local > saved) saveBestRef.current(local);
+    }, (e) => alive && setSyncError(syncMessage('leer', e)));
     return () => { alive = false; };
   }, [uid]);
 
@@ -567,6 +566,7 @@ export default function TennisGame() {
           <span>{recordNote}</span>
           <span>Bola a {kmh} km/h</span>
         </p>
+        {syncError && <p className="tg-error" role="alert">{syncError}</p>}
         <p className="tg-hint">{touch ? 'Desliza el dedo para moverte. Toca la pista para empezar.' : 'Mueve el ratón para moverte. Haz clic en la pista para empezar.'}</p>
       </aside>
     </div>
