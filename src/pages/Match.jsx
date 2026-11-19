@@ -337,7 +337,7 @@ function ResultForm({ match, name, onSubmit, onCancel, busy, submitLabel }) {
             label="Desempate"
             value={decider}
             onChange={setDecider}
-            options={[{ value: DECIDERS.set, label: 'Tercer set' }, { value: DECIDERS.super, label: 'Súper tie-break' }]}
+            options={[{ value: DECIDERS.super, label: 'Súper tie-break' }, { value: DECIDERS.set, label: 'Tercer set' }]}
           />
         </div>
       )}

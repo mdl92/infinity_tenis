@@ -97,8 +97,8 @@ export function formSets(sets = []) {
   return [row(sets[0]), row(sets[1]), row(sets[2])];
 }
 
-/** Cómo se desempató un resultado ya guardado (por defecto, tercer set). */
-export const deciderOf = (sets = []) => (sets[2]?.super ? DECIDERS.super : DECIDERS.set);
+/** Cómo se desempató un resultado ya guardado. Por defecto, súper tie-break (salvo que ya tenga un tercer set normal). */
+export const deciderOf = (sets = []) => (sets[2] && !sets[2].super ? DECIDERS.set : DECIDERS.super);
 
 /** ¿Este set es un súper tie-break? (va marcado con `super: true`) */
 export const isSuper = (s) => Boolean(s?.super);
