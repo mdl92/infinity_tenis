@@ -41,7 +41,7 @@ function BallLine({ className = '' }) {
 export default function Home() {
   const { user, profile, isAdmin, logout } = useAuth();
   const uid = user?.uid;
-  const { active } = useTournament();
+  const { active, loading: loadingTournament } = useTournament();
   const tid = active?.id;
   const { data: categories } = useCollection('categories', [['tournamentId', '==', tid]]);
   const { data: groups } = useCollection('groups', [['tournamentId', '==', tid]]);
@@ -146,7 +146,8 @@ export default function Home() {
           </button>
         )}
 
-        {cats.length === 0 && <p className="hm-empty">En cuanto el club publique las categorías del torneo, aparecerán aquí.</p>}
+        {!loadingTournament && !active && <p className="hm-empty">Ahora mismo no hay ningún torneo en curso. Cuando empiece el próximo, aparecerá aquí.</p>}
+        {active && cats.length === 0 && <p className="hm-empty">En cuanto el club publique las categorías del torneo, aparecerán aquí.</p>}
 
         {/* Categoría abierta */}
         {current && (

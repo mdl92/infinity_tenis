@@ -1488,3 +1488,7 @@ button.bk-match:focus-visible { outline: 2px solid var(--violet); outline-offset
   .tg-meta { text-align: right; font-size: .85rem; }
   .tg-hint, .tg-error { width: 100%; font-size: .74rem; }
 }
+
+/* Organización: aviso de torneo fuera de fechas (los jugadores no lo ven) */
+.hm-chip.adm2-hidden { display: flex; width: fit-content; margin-top: .6rem; background: var(--yellow); }
+.hm-chip.adm2-hidden svg { color: var(--navy); }

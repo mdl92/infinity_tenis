@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTournament } from '../context/TournamentContext.jsx';
 import { useCollection, useMyMatches, usePeople } from '../hooks/useFirestore';
 import { sortMatches } from '../lib/matches';
 import { EmptyState, PageHead } from '../components/ui.jsx';
@@ -12,9 +13,12 @@ export default function MyMatches() {
   const { byId: usersById } = usePeople();
   const { data: groups } = useCollection('groups');
   const [tab, setTab] = useState('open');
+  // Solo partidos de torneos visibles (a los jugadores no se les muestran los que están fuera de fechas)
+  const { tournaments } = useTournament();
+  const visible = new Set(tournaments.map((t) => t.id));
 
 
-  const all = sortMatches(myMatches.filter((m) => !isBye(m)), user.uid);
+  const all = sortMatches(myMatches.filter((m) => !isBye(m) && visible.has(m.tournamentId)), user.uid);
   const open = all.filter((m) => m.status !== 'confirmed');
   const done = all.filter((m) => m.status === 'confirmed');
   const shown = tab === 'open' ? open : done;

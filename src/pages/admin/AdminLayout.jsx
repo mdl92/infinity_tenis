@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { CalendarDays, ExternalLink, LayoutGrid, LogOut, MapPin, Pencil, Plus, Users } from 'lucide-react';
+import { CalendarDays, EyeOff, ExternalLink, LayoutGrid, LogOut, MapPin, Pencil, Plus, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { useTournament } from '../../context/TournamentContext.jsx';
+import { isInDates, useTournament } from '../../context/TournamentContext.jsx';
 import { useCollection } from '../../hooks/useFirestore';
 import { byCategory } from '../../lib/tennis';
 import { isDoubles } from '../../lib/teams';
@@ -54,10 +54,15 @@ export default function AdminLayout() {
               {active?.venue && <span><MapPin aria-hidden="true" /> {active.venue}</span>}
             </p>
           )}
+          {active && !isInDates(active) && (
+            <p className="hm-chip adm2-hidden">
+              <span><EyeOff aria-hidden="true" /> Oculto para los jugadores: fuera de fechas (se ve hasta un mes después de terminar)</span>
+            </p>
+          )}
           <div className="adm2-tournament">
             {tournaments.length > 1 && (
               <Select label="Torneo" className="adm2-tsel" size="sm" value={active?.id ?? ''} onChange={choose}
-                options={tournaments.map((t) => ({ value: t.id, label: t.name }))} />
+                options={tournaments.map((t) => ({ value: t.id, label: t.name, hint: isInDates(t) ? undefined : 'Oculto' }))} />
             )}
             {active && <button type="button" className="hm-acc-btn" onClick={() => setModal('edit')}><Pencil /> <span>Editar torneo</span></button>}
             <button type="button" className="hm-acc-btn" onClick={() => setModal('new')}><Plus /> <span>Nuevo torneo</span></button>
